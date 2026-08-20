@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phishing-triage"
+version = "0.1.0"
+description = "Asistent local de triaj pentru mail-uri de phishing raportate"
+requires-python = ">=3.12"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "PTH", "RUF", "S"]
+ignore = ["S101"]  # assert e ok in teste
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+disallow_untyped_defs = true
+mypy_path = "src"
+packages = ["triage"]
+
+[[tool.mypy.overrides]]
+module = ["magic.*", "confusable_homoglyphs.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = """
+    -q
+    --strict-markers
+    --disable-socket
+    --allow-unix-socket
+    --cov=triage
+    --cov-report=term-missing
+"""
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "needs_ollama: test care are voie sa vorbeasca cu Ollama pe 127.0.0.1",
+]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "raise NotImplementedError"]

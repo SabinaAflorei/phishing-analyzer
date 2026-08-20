@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Triaj phishing{% endblock %}</title>
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 1100px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: .4rem .6rem; text-align: left; }
+    .SIMULATION { color:#0b6; } .MALICIOUS { color:#c00; }
+    .SPAM { color:#a60; } .LEGITIMATE { color:#06c; } .NEEDS_REVIEW { color:#666; }
+    code { background:#f4f4f4; padding:.1rem .3rem; }
+  </style>
+</head>
+<body>
+  <h1>Triaj raportari phishing</h1>
+  {% block content %}{% endblock %}
+</body>
+</html>

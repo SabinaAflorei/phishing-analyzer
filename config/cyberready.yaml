@@ -1,0 +1,7 @@
+# Fingerprint pentru platforma de simulare (CyberReady).
+# Se schimba cand platforma se actualizeaza -> tine-l aici, NU in cod.
+# Regula: precizie 100% (fals pozitivele sunt inacceptabile), fals negativele ok.
+sender_domains: []        # ex: cyberready-mail.example
+sender_ips: []            # ex: 203.0.113.10
+tracking_hostnames: []    # ex: track.cyberready.example
+header_markers: []        # ex: X-CyberReady-Campaign

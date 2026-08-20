@@ -1,0 +1,24 @@
+# Copiaza in config/settings.yaml. settings.yaml NU intra in git.
+source: corpus            # corpus | imap
+poll_interval_seconds: 300
+
+paths:
+  raw_eml_dir: data/raw_eml
+  db_path: data/db/triage.sqlite3
+
+llm:
+  enabled: true
+  base_url: http://127.0.0.1:11434
+  model: llama3.1:8b
+  temperature: 0.2
+  max_input_chars: 2000   # trunchiere agresiva inainte de model
+  timeout_seconds: 30
+
+enrichment:
+  enabled: false          # offline-first: implicit oprit
+  private_submission_only: true
+  strip_recipient_tokens: true
+
+dashboard:
+  host: 127.0.0.1         # niciodata 0.0.0.0
+  port: 8000

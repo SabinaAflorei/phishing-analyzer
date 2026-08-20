@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<table>
+  <thead>
+    <tr><th>Data</th><th>Raportor</th><th>Subiect</th><th>Verdict</th><th>Incredere</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    {% for r in reports %}
+    <tr>
+      <td>{{ r.received_at }}</td>
+      <td>{{ r.reporter }}</td>
+      <td>{{ r.subject }}</td>
+      <td class="{{ r.verdict }}">{{ r.verdict }}</td>
+      <td>{{ r.confidence }}</td>
+      <td>{{ r.status }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6">Coada e goala.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,4 @@
+case: 07_marketing_spam
+expected_verdict: SPAM
+must_contain_evidence: []   # coduri de dovezi obligatorii
+notes: ""

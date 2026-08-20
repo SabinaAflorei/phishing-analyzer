@@ -1,0 +1,5 @@
+# Analiza doar pe metadate. Fisierul NU se deschide si NU se executa.
+executable_extensions: [exe, scr, com, pif, bat, cmd, js, jse, vbs, vbe, wsf, hta, lnk, msi, ps1]
+macro_enabled_extensions: [docm, xlsm, pptm, dotm, xltm, xlam]
+archive_extensions: [zip, rar, 7z, iso, img, cab]
+suspicious_double_extension_pattern: '\.(pdf|doc|docx|xls|xlsx|jpg|png|txt)\.[a-z0-9]{2,4}$'
