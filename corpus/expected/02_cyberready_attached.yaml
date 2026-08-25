@@ -1,4 +1,14 @@
 case: 02_cyberready_attached
 expected_verdict: SIMULATION
-must_contain_evidence: []   # coduri de dovezi obligatorii
-notes: ""
+source: corpus/msg/2.msg
+
+# Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
+# vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
+must_contain_evidence: []
+
+notes: |
+  Aceeasi campanie ca 01, dar mesajul original vine ca atasament
+  message/rfc822. Aici exista headerele complete: Authentication-Results
+  (spf=Pass pentru crsmtp.notificaton.online), DKIM d=notificaton.online,
+  Received de la mta1.cybereadysmtp.com (99.80.130.134) si header-ul X-CRPS.
+  Perechea 01/02 arata exact de ce parser-ul trebuie sa trateze ambele forme.

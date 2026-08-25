@@ -1,4 +1,14 @@
 case: 01_cyberready_forward
 expected_verdict: SIMULATION
-must_contain_evidence: []   # coduri de dovezi obligatorii
-notes: ""
+source: corpus/msg/1.msg
+
+# Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
+# vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
+must_contain_evidence: []
+
+notes: |
+  Simulare CyberReady, raportata prin forward inline. Headerele originale NU
+  supravietuiesc forward-ului: raman doar liniile 'From:/Sent:/To:/Subject:'
+  din corp. Fingerprint-ul se prinde pe URL-urile din corpul HTML
+  (trck.cybeready.net, inner.website) si pe In-Reply-To/References, care
+  pastreaza Message-ID-ul original @mta1.cybereadysmtp.com.

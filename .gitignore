@@ -14,5 +14,15 @@ build/
 data/
 .env
 config/settings.yaml
+# Numele serverelor Exchange interne si maparea lor. Versiunea .example din git
+# are aceeasi structura cu valori inlocuite.
+config/company_domains.yaml
+
+# Corpusul de test contine raportari reale: nume si adrese de colegi, contacte
+# externe si URL-uri de tracking cu token per destinatar (sectiunea 4.6).
+# Repo-ul e public. Datele se copiaza pe VM prin alt canal - vezi corpus/README.md.
+corpus/eml/
+corpus/msg/
 *.eml
-!corpus/eml/*.eml
+*.msg
+build/

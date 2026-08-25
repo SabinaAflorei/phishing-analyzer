@@ -1,4 +1,29 @@
 case: 06_legit_newsletter
 expected_verdict: LEGITIMATE
-must_contain_evidence: []   # coduri de dovezi obligatorii
-notes: ""
+source: corpus/msg/6.msg
+
+# Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
+# vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
+must_contain_evidence: []
+
+notes: |
+  Newsletter comercial real de la un furnizor cunoscut (ctce.ro, JuristPRO),
+  la care compania este abonata - deci nu e spam nesolicitat.
+
+  ATENTIE, aici foaia de task si realitatea nu se suprapun. Foaia spune
+  "toate autentificarile pass", dar mesajul a fost raportat prin forward
+  inline, iar forward-ul nu pastreaza Authentication-Results. Nu ai pe ce
+  citi un SPF/DKIM/DMARC pass.
+
+  Regula din sectiunea 5 zice ca LEGITIMATE se emite doar cu incredere mare,
+  altfel NEEDS_REVIEW. Aplicata litera cu litera aici, corpusul ramane fara
+  niciun caz LEGITIMATE, iar categoria cea mai delicata nu se mai testeaza
+  niciodata.
+
+  Iesirea din impas e trusted_partners din config/company_domains.yaml:
+  domeniu de furnizor cunoscut + niciun semnal de esec + markeri de newsletter
+  (List-Unsubscribe) = incredere mare pe o cale deterministica, fara sa slabesti
+  regula de autentificare. Documenteaza decizia in README, la sectiunea
+  "Deciziile pe care le iei tu",
+  oricare ar fi ea - e exact genul de lucru pe care il intreaba cineva peste
+  sase luni.

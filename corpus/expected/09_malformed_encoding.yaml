@@ -1,4 +1,12 @@
 case: 09_malformed_encoding
 expected_verdict: NEEDS_REVIEW
-must_contain_evidence: []   # coduri de dovezi obligatorii
-notes: ""
+source: sintetic
+
+# Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
+# vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
+must_contain_evidence: []
+
+notes: |
+  Email stricat: subiect base64 invalid, header fara doua puncte, mojibake in
+  corp, quoted-printable trunchiat, data negramaticala. Nu trebuie sa
+  produca verdict gresit si mai ales nu trebuie sa opreasca pipeline-ul.

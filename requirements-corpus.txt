@@ -1,0 +1,9 @@
+# Unelte folosite O SINGURA DATA, la pregatirea corpusului. NU sunt dependinte
+# de runtime si nu se instaleaza pe masina care ruleaza sistemul.
+#
+#   pip install -r requirements-corpus.txt
+#   python3 scripts/msg_to_eml.py corpus/msg/1.msg -o corpus/eml/01_cyberready_forward.eml
+#
+# Motivul separarii: extract-msg trage oletools, cryptography si inca vreo zece
+# pachete. Pipeline-ul nu vede niciodata un .msg - conversia se face inainte.
+extract-msg==0.56.1

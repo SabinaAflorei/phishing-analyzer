@@ -1,0 +1,48 @@
+# EXEMPLU. Copiaza in config/company_domains.yaml si completeaza cu valorile
+# reale. Fisierul real NU intra in git: numele serverelor Exchange interne si
+# maparea lor de IP-uri nu au ce cauta intr-un repo public.
+#
+# Domeniile organizatiei - baza pentru detectia de lookalike si de spoofing intern.
+#
+# Un From care pretinde unul din domeniile de mai jos, dar care vine dintr-o
+# origine externa, este semnalul cel mai puternic din tot analizorul.
+owned_domains:
+  - exemplu.ro                  # domeniul de mail al angajatilor
+  - intern.exemplu.ro           # domeniul serverelor Exchange interne
+  - exemplu.com                 # domeniul gateway-ului
+
+# Hostname-urile infrastructurii proprii de mail. Un Received prin acestea
+# inseamna traseu intern; lipsa lor pe un mesaj care pretinde ca e intern
+# este exact semnalul din cazul 05.
+mail_infrastructure:
+  - mail1.exemplu.ro
+  - mx01.exemplu.com
+  - EXC00AA01P.intern.exemplu.ro
+
+# Domenii externe cunoscute si de incredere (furnizori, SaaS folosit intern).
+# Sunt singura cale deterministica prin care un mesaj fara Authentication-Results
+# poate ajunge totusi la LEGITIMATE cu incredere mare - vezi nota din
+# corpus/expected/06_legit_newsletter.yaml. Adauga aici doar domenii pe care
+# le-ai verificat manual; lista asta slabeste o regula de siguranta.
+trusted_partners:
+  - microsoft.com
+  - atlassian.net
+  - furnizor-newsletter.ro      # furnizor cu abonament existent (cazul 06)
+
+# Adresa la care angajatii raporteaza. Mesajele CATRE ea sunt raportari;
+# nu se analizeaza wrapper-ul, ci mesajul original din interior.
+report_mailbox: itsec@exemplu.ro
+
+high_risk_tlds:
+  - .zip
+  - .mov
+  - .top
+  - .xyz
+  - .click
+  - .country
+  - .support
+  - .online
+  - .ru
+# NOTA: notificaton.online, domeniul platformei de simulare, cade si el sub
+# .online. De asta fingerprint-ul CyberReady se evalueaza PRIMUL si opreste
+# restul semnalelor - vezi ordinea din src/triage/analyzer/__init__.py.

@@ -1,0 +1,16 @@
+case: 12_stripped_attachment_quote
+expected_verdict: NEEDS_REVIEW
+source: corpus/msg/3.msg
+
+# Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
+# vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
+must_contain_evidence: []
+
+notes: |
+  BONUS - nu intra in cele 11 cazuri din criteriul de acceptanta.
+  Cerere de oferta externa careia gateway-ul companiei i-a taiat
+  atasamentul de tip arhiva, inlocuindu-l cu o nota de politica. Mesajul
+  original nu mai exista, headerele lui nu au supravietuit forward-ului,
+  iar To: e adresa expeditorului insusi (destinatari reali in BCC).
+  Semnale amestecate si insuficiente -> escaladare. Il tii ca sa verifici
+  ca analizorul nu forteaza un verdict cand nu are pe ce sa se sprijine.

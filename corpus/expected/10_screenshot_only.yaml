@@ -1,4 +1,0 @@
-case: 10_screenshot_only
-expected_verdict: NEEDS_REVIEW
-must_contain_evidence: []   # coduri de dovezi obligatorii
-notes: ""

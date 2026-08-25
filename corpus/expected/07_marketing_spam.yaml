@@ -1,4 +1,12 @@
 case: 07_marketing_spam
 expected_verdict: SPAM
-must_contain_evidence: []   # coduri de dovezi obligatorii
-notes: ""
+source: corpus/msg/7.msg
+
+# Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
+# vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
+must_contain_evidence: []
+
+notes: |
+  Publicitate B2B nesolicitata (eveniment CIGRE), fara pericol. Are link de
+  dezabonare, deci raspunsul trebuie sa recomande dezabonarea, NU blocarea.
+  Verifica exact ramura din prompt-ul SPAM care alege intre cele doua.

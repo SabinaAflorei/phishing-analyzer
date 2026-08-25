@@ -9,7 +9,7 @@ paths:
 llm:
   enabled: true
   base_url: http://127.0.0.1:11434
-  model: llama3.1:8b
+  model: llama3.1:8b     # punct de pornire, NU o decizie - vezi README
   temperature: 0.2
   max_input_chars: 2000   # trunchiere agresiva inainte de model
   timeout_seconds: 30

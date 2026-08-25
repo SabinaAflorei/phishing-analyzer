@@ -1,4 +1,13 @@
 case: 04_macro_attachment
 expected_verdict: MALICIOUS
-must_contain_evidence: []   # coduri de dovezi obligatorii
-notes: ""
+source: sintetic
+
+# Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
+# vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
+must_contain_evidence: []
+
+notes: |
+  Atasament .docm (macro-enabled), cerere explicita de activare a
+  macrocomenzilor, urgenta de plata. Verdictul se decide pe metadatele
+  atasamentului - fisierul nu se deschide si nu se ruleaza niciodata.
+  Payload-ul din arhiva este un fixture inofensiv (BENIGN_TEST_FIXTURE.txt).

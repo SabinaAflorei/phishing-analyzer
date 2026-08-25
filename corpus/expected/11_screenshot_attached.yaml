@@ -1,0 +1,13 @@
+case: 11_screenshot_attached
+expected_verdict: NEEDS_REVIEW
+source: corpus/msg/11.msg
+
+# Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
+# vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
+must_contain_evidence: []
+
+notes: |
+  Ca 10, dar captura vine ca atasament propriu-zis (.png, nu inline) si
+  raportorul descrie in cuvinte ce a primit. Descrierea NU e o sursa de
+  verdict: e text scris de om, nu dovada tehnica. Tot NEEDS_REVIEW.
+  Fisierul se numea 11_forward_chain in schelet; numele era gresit.

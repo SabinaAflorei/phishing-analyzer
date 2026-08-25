@@ -1,0 +1,12 @@
+case: 10_screenshot_inline
+expected_verdict: NEEDS_REVIEW
+source: corpus/msg/10.msg
+
+# Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
+# vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
+must_contain_evidence: []
+
+notes: |
+  Raportare doar cu captura de ecran lipita in corp (imagine inline cu
+  Content-ID, marcata hidden), fara mesaj original si fara text explicativ.
+  Nu exista nimic de analizat determinist -> escaladare, fara draft.

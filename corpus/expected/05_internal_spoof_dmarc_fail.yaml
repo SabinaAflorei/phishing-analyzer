@@ -1,4 +1,14 @@
 case: 05_internal_spoof_dmarc_fail
 expected_verdict: MALICIOUS
-must_contain_evidence: []   # coduri de dovezi obligatorii
-notes: ""
+source: sintetic
+
+# Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
+# vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
+must_contain_evidence: []
+
+notes: |
+  Spoofing de domeniu intern (fraudarea directorului general). From pretinde
+  distributie-energie.ro, dar originea e externa: sendmailer-217.online.
+  DMARC fail action=reject, Reply-To pe un Gmail, Return-Path nepotrivit.
+  Depinde de company_domains.yaml: fara domeniul propriu configurat,
+  semnalul 'From pretinde domeniul companiei' nu se poate produce.

@@ -1,4 +1,4 @@
-.PHONY: help venv install run test lint typecheck ci fmt clean corpus-check
+.PHONY: help venv install run test lint typecheck ci fmt clean status
 
 VENV := .venv
 PY   := $(VENV)/bin/python
@@ -18,12 +18,15 @@ test: ## Ruleaza testele (retea blocata by default)
 	$(VENV)/bin/pytest
 
 lint: ## ruff
-	$(VENV)/bin/ruff check src tests
-	$(VENV)/bin/ruff format --check src tests
+	$(VENV)/bin/ruff check src tests scripts
+	$(VENV)/bin/ruff format --check src tests scripts
 
 fmt: ## formateaza
-	$(VENV)/bin/ruff format src tests
-	$(VENV)/bin/ruff check --fix src tests
+	$(VENV)/bin/ruff format src tests scripts
+	$(VENV)/bin/ruff check --fix src tests scripts
+
+status: ## Panou de progres -> build/status.html
+	$(PY) scripts/status.py
 
 typecheck: ## mypy
 	$(VENV)/bin/mypy
@@ -31,5 +34,5 @@ typecheck: ## mypy
 ci: lint typecheck test ## tot ce trebuie sa fie verde inainte de PR
 
 clean:
-	rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage
+	rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage build
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +

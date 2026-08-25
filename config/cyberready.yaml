@@ -1,7 +1,44 @@
 # Fingerprint pentru platforma de simulare (CyberReady).
 # Se schimba cand platforma se actualizeaza -> tine-l aici, NU in cod.
-# Regula: precizie 100% (fals pozitivele sunt inacceptabile), fals negativele ok.
-sender_domains: []        # ex: cyberready-mail.example
-sender_ips: []            # ex: 203.0.113.10
-tracking_hostnames: []    # ex: track.cyberready.example
-header_markers: []        # ex: X-CyberReady-Campaign
+#
+# Regula: precizie 100%. Un fals pozitiv inseamna ca un phishing real primeste
+# raspunsul bland de simulare - inacceptabil. Un fals negativ inseamna doar ca
+# o simulare ajunge la analist - acceptabil.
+#
+# De aceea semnalele de mai jos sunt exacte (egalitate sau sufix de domeniu),
+# niciodata potriviri partiale de tip "contine cybeready undeva in text".
+#
+# Valorile initiale sunt extrase din corpus/eml/02_cyberready_attached.eml,
+# singurul caz care pastreaza headerele originale. Verifica-le cand primesti
+# prima campanie noua si adauga ce lipseste.
+
+# Domeniul din From / Return-Path / envelope al mesajelor de simulare.
+# Se potriveste domeniul exact SAU un subdomeniu al lui.
+sender_domains:
+  - notificaton.online          # From: SCAN <hp@notificaton.online>, d= din DKIM
+  - crsmtp.notificaton.online   # envelope-from / Return-Path
+  - cybereadysmtp.com           # HELO si Message-ID: @mta1.cybereadysmtp.com
+
+# IP-urile din care expediaza platforma. Luate din inregistrarea SPF publicata
+# pentru crsmtp.notificaton.online: "v=spf1 ip4:99.80.130.134 ip4:54.228.34.23 ~all"
+sender_ips:
+  - 99.80.130.134
+  - 54.228.34.23
+
+# Hostname-urile din URL-urile de tracking si de landing page.
+# ATENTIE: sunt hostname-uri de comparat ca text, extrase din corpul HTML.
+# Nu se rezolva DNS pe ele si nu se acceseaza niciodata (sectiunea 4.1).
+tracking_hostnames:
+  - trck.cybeready.net          # pixel de tracking: /opentracking/<id>/mta1/<token>.gif
+  - inner.website               # landing page-ul pe care se masoara click-ul
+
+# Headere proprietare pe care le adauga platforma.
+header_markers:
+  - X-CRPS                      # identificator de campanie
+  - X-Virtual-MTA               # valoare "mta1" pe campaniile vazute pana acum
+
+# Tipar pentru Message-ID-ul generat de platforma. Util pentru forward-urile
+# inline, unde headerele originale se pierd dar In-Reply-To / References
+# supravietuiesc - asa se prinde cazul 01.
+message_id_suffixes:
+  - "@mta1.cybereadysmtp.com"
