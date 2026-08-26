@@ -2,6 +2,7 @@ name: CI
 on:
   push: { branches: [main] }
   pull_request: { branches: [main] }
+  workflow_dispatch:
 
 env:
   # Criteriul de acceptanta (sectiunea 8.4) cere >70% pe parser si analizor.
