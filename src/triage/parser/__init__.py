@@ -20,4 +20,4 @@ def parse_report(raw: bytes) -> object:
     """Headere, Authentication-Results, Received chain, From/Reply-To/Return-Path,
     subiect, corp text, URL-uri (extrase si din HTML - HTML-ul NU se afiseaza),
     atasamente (nume, sha256, tip, dimensiune)."""
-    raise NotImplementedError
+    raise NotImplementedError 
