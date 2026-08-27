@@ -110,6 +110,7 @@ def parse_report(raw: bytes) -> ParsedEmail:
                 # Extragem URL-urile din tag-urile <a>
                 for a_tag in soup.find_all("a", href=True):
                     urls.add(a_tag["href"])
+                    
     return ParsedEmail(
         report_kind=kind,
         subject=subject,
