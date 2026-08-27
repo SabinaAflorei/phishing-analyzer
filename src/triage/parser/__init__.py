@@ -1,12 +1,12 @@
 """Extrage mesajul ORIGINAL, nu wrapper-ul colegului care a raportat."""
 
+from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass, field
 from email import message_from_bytes
 from enum import StrEnum
 from bs4 import BeautifulSoup
-from __future__ import annotations
 
 class ReportKind(StrEnum):
     FORWARD_INLINE = "FORWARD_INLINE"
