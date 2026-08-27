@@ -17,14 +17,15 @@ target-version = "py312"
 src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "PTH", "RUF", "S"]
+# Regulile cosmetice (E, W, I, N) si pasul `ruff format --check` sunt scoase
+# intentionat: CI se uita la ce e gresit, nu la cum arata. Spatii pe linia
+# goala, ordinea importurilor sau lungimea liniei nu mai fac build-ul rosu.
+# Formatarea ramane disponibila manual, prin `make fmt`.
+select = ["F", "UP", "B", "A", "C4", "SIM", "PTH", "RUF", "S"]
 ignore = ["S101"]  # assert e ok in teste
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S", "B"]
-# Prompt-urile sunt proza in romana, scrisa ca sa fie citita de un model.
-# Taierea lor la 100 de coloane ar strica exact lucrul pe care il calibrezi.
-"src/triage/drafter/prompts.py" = ["E501"]
 # Utilitare rulate manual, nu cod de productie: print-uri si cai relative ok.
 "scripts/*" = ["T201", "PTH"]
 

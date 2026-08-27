@@ -22,6 +22,5 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt && pip install -e .
       - run: ruff check src tests scripts
-      - run: ruff format --check src tests scripts
       - run: mypy
       - run: pytest --cov-fail-under=${{ env.COV_MIN }}
