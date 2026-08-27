@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from triage.defang import defang
+from triage.defang import refang
 
 
 def test_defang_url() -> None:
@@ -15,3 +16,7 @@ def test_defang_is_idempotent_enough() -> None:
     once = defang("http://a.b.example.ro")
     assert "[.]" in once
     assert "http://" not in once
+
+
+def test_refang():
+    assert refang("hxxps[://]example[.]com") == "https://example.com"

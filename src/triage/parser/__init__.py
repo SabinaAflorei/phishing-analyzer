@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from email import message_from_bytes
 from enum import StrEnum
-from bs4 import BeautifulSoup  # type: ignore[import-untyped]
+from bs4 import BeautifulSoup
 
 class ReportKind(StrEnum):
     FORWARD_INLINE = "FORWARD_INLINE"
