@@ -49,6 +49,9 @@ def test_analyze_suspect_attachment() -> None:
     assert result.confidence == 0.95
 
 
+# TODO: testul fixeaza bug-ul in loc sa il prinda. Are doar spf=pass si dkim=pass,
+# fara DMARC si cu domeniu necunoscut, si totusi cere LEGITIMATE. 5 cere toate
+# trei plus domeniu cunoscut.
 def test_analyze_legitimate() -> None:
     parsed = ParsedEmail(
         report_kind=ReportKind.UNKNOWN,
@@ -78,3 +81,9 @@ def test_cybeready_simulation_domains(cybeready_domain: str) -> None:
     assert analysis.verdict == Verdict.SIMULATION
     assert analysis.confidence == 1.0
     assert analysis.evidence[0].code == "CYBERREADY_SIMULATION"
+
+
+# TODO: lipseste testul cel mai important pentru 8.1: From falsificat cu un domeniu
+# de simulare dar cu SPF fail NU trebuie sa iasa SIMULATION.
+# TODO: lipsesc teste pentru SPAM, pentru atasament cu macro (docm), pentru mail
+# fara Authentication-Results si pentru dubla extensie.

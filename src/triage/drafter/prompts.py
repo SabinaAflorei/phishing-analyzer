@@ -168,6 +168,11 @@ STATIC_TEMPLATES: dict[str, str] = {
         "datele de autentificare?\n\n"
         "Cu stimă,"
     ),
+    # TODO: spune sigur ca exista link de dezabonare, dar nu avem de unde sti -
+    # sablonul e static si nu vede dovezile. Poate trimite colegul sa caute ceva
+    # ce nu exista.
+    # TODO: da si dezabonare si blocare, desi regula scrisa mai sus la SPAM zice
+    # sa alegi una singura.
     "SPAM": (
         "Bună ziua, {prenume},\n\n"
         "Vă mulțumim pentru raportare. Am verificat mesajul și este publicitate "
