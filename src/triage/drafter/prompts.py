@@ -1,33 +1,4 @@
-"""System prompt-uri pentru drafter.
-
-Formatul de iesire este un email complet, oprit inainte de semnatura:
-
-    Buna ziua, Andrei,
-
-    <corp de 3-4 propozitii>
-
-    Cu stima,
-
-Analistul adauga propriul nume sub formula de incheiere, in dashboard.
-Modelul NU semneaza si nu inventeaza un nume - altfel raspunsul pleaca semnat
-de altcineva decat cine il trimite.
-
-Principii, invatate din esecuri masurate pe corpus:
-
-1. Formulare pozitiva, nu negatii. "Scrii X" merge; "nu scrii Y" e ignorat de
-   modelele mici. Cand negatia e obligatorie, se da ca lista concreta de cuvinte
-   interzise, nu ca principiu abstract.
-2. Nu pomeni categoria in prompt daca modelul nu are voie sa o pomeneasca in
-   raspuns. "Este o simulare, nu dezvalui ca e o simulare" produce fix cuvantul
-   pe care il interzici.
-3. Un exemplu bate zece reguli, dar exemplul trebuie sa fie DIFERIT de cazul
-   analizat. La temperatura joasa, un exemplu care se potriveste exact peste caz
-   este reprodus literal in loc sa fie folosit ca tipar.
-4. Exemplele se scriu cu diacritice corecte. Modelul copiaza forma, inclusiv
-   absenta diacriticelor daca exemplul e in ASCII.
-5. Modelul nu primeste niciodata corpul brut al mailului ca instructiune, doar
-   verdictul si dovezile extrase de analizorul determinist.
-"""
+"""System prompt-uri și șabloane statice pentru drafter."""
 
 from __future__ import annotations
 
@@ -43,7 +14,7 @@ Răspunsul tău are exact trei părți, în această ordine, separate prin câte
 2. Corpul mesajului: un singur paragraf de 3 sau 4 propoziții.
 3. Formula de încheiere, pe ultimul rând: „Cu stimă,"
 
-Te oprești imediat după formula de încheiere. Nu scrii niciun nume sub ea, nici al tău, nici al echipei, și nu adaugi paranteze pătrate sau alte substituenți. Semnătura o completează analistul.
+Te oprești imediat după formula de încheiere. Nu scrii niciun nume sub ea, nici al tău, nici al echipei, și nu adaugi paranteze pătrate sau alți substituenți. Semnătura o completează analistul.
 Nu scrii subiect, nu folosești liste, titluri sau text îngroșat.
 
 LIMBA
@@ -67,7 +38,6 @@ def _p(specific: str, example: str) -> str:
 
 # ---------------------------------------------------------------------------
 # SIMULATION
-# Cuvantul "simulare" nu apare nicaieri inainte de lista de interdictii.
 # ---------------------------------------------------------------------------
 
 SIMULATION = _p(
@@ -84,8 +54,6 @@ Cu stimă,""",
 
 # ---------------------------------------------------------------------------
 # MALICIOUS
-# Exemplul e despre un atasament periculos, ca sa nu se suprapuna peste cazurile
-# de phishing de credentiale din corpus.
 # ---------------------------------------------------------------------------
 
 MALICIOUS = _p(
@@ -103,8 +71,6 @@ Cu stimă,""",
 
 # ---------------------------------------------------------------------------
 # SPAM
-# Exemplul foloseste blocarea, cazul din corpus are buton de dezabonare -
-# asa verifici daca modelul alege indicatia potrivita sau copiaza exemplul.
 # ---------------------------------------------------------------------------
 
 SPAM = _p(
@@ -122,8 +88,6 @@ Cu stimă,""",
 
 # ---------------------------------------------------------------------------
 # LEGITIMATE
-# Categoria cea mai delicata: rata de raportare este o metrica de securitate.
-# Exemplul e despre un mesaj intern de la IT, nu despre un furnizor extern.
 # ---------------------------------------------------------------------------
 
 LEGITIMATE = _p(
@@ -148,8 +112,7 @@ SYSTEM_PROMPTS: dict[str, str] = {
 
 
 # ---------------------------------------------------------------------------
-# Template-uri statice: fallback obligatoriu (sectiunea 6.4).
-# {prenume} se completeaza de drafter din numele raportorului.
+# Template-uri statice: fallback obligatoriu.
 # ---------------------------------------------------------------------------
 
 STATIC_TEMPLATES: dict[str, str] = {
@@ -168,17 +131,12 @@ STATIC_TEMPLATES: dict[str, str] = {
         "datele de autentificare?\n\n"
         "Cu stimă,"
     ),
-    # TODO: spune sigur ca exista link de dezabonare, dar nu avem de unde sti -
-    # sablonul e static si nu vede dovezile. Poate trimite colegul sa caute ceva
-    # ce nu exista.
-    # TODO: da si dezabonare si blocare, desi regula scrisa mai sus la SPAM zice
-    # sa alegi una singura.
     "SPAM": (
         "Bună ziua, {prenume},\n\n"
         "Vă mulțumim pentru raportare. Am verificat mesajul și este publicitate "
         "nesolicitată, care nu prezintă un risc pentru dumneavoastră sau pentru "
-        "companie. Vă puteți dezabona folosind linkul din partea de jos a mesajului, "
-        "iar dacă acesta nu funcționează vă putem ajuta cu blocarea expeditorului.\n\n"
+        "companie. Vă recomandăm blocarea expeditorului sau folosirea opțiunii de "
+        "dezabonare din mesaj dacă este disponibilă.\n\n"
         "Cu stimă,"
     ),
     "LEGITIMATE": (
@@ -195,14 +153,13 @@ CLOSING = "Cu stimă,"
 
 
 def split_email(text: str) -> tuple[str, str, str]:
-    """Imparte raspunsul in (salut, corp, incheiere).
+    """Împarte răspunsul în (salut, corp, încheiere).
 
-    Folosit de verificari si de validarea din drafter: daca oricare parte
-    lipseste, output-ul este invalid si se cade pe template static.
+    Folosit de verificări și de validarea din drafter: dacă oricare parte
+    lipsește, output-ul este invalid și se cade pe template static.
     """
-    lines = [ln.strip() for ln in text.strip().splitlines()]
-    lines = [ln for ln in lines if ln]
-    if not lines:
+    lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
+    if len(lines) < 3:
         return "", "", ""
 
     def _norm(s: str) -> str:
@@ -211,6 +168,9 @@ def split_email(text: str) -> tuple[str, str, str]:
 
     greeting = lines[0] if _norm(lines[0]).startswith("buna ziua") else ""
     closing = lines[-1] if _norm(lines[-1]).startswith("cu ") else ""
-    start = 1 if greeting else 0
-    end = len(lines) - 1 if closing else len(lines)
-    return greeting, " ".join(lines[start:end]), closing
+
+    if not greeting or not closing:
+        return "", "", ""
+
+    body = " ".join(lines[1:-1])
+    return greeting, body, closing
