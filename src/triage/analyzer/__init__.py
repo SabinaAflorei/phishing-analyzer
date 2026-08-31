@@ -31,7 +31,7 @@ def load_yaml_config(file_name: str) -> dict[str, Any]:
     """Încarcă un fișier de configurație YAML din directorul config."""
     config_path = CONFIG_DIR / file_name
     if config_path.exists():
-        with open(config_path, "r", encoding="utf-8") as f:
+        with config_path.open(encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     return {}
 
