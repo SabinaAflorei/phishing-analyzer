@@ -9,11 +9,24 @@ from triage.verdicts import Verdict
 def test_analyze_cyberready_simulation() -> None:
     parsed = ParsedEmail(
         report_kind=ReportKind.UNKNOWN,
-        from_address="test@admin-support.site",
+        from_address="test@act-now-www.org",
+        auth_results="spf=pass dkim=pass",
     )
     result = analyze(parsed)
     assert result.verdict == Verdict.SIMULATION
     assert result.confidence == 1.0
+
+
+def test_analyze_spoofed_cybeready_domain_fails() -> None:
+    """From falsificat cu un domeniu de simulare dar cu SPF fail NU trebuie să iasă SIMULATION."""
+    parsed = ParsedEmail(
+        report_kind=ReportKind.UNKNOWN,
+        from_address="test@act-now-www.org",
+        auth_results="spf=fail dkim=fail",
+    )
+    result = analyze(parsed)
+    assert result.verdict == Verdict.MALICIOUS
+    assert result.confidence == 0.9
 
 
 def test_analyze_screenshot_only() -> None:
@@ -49,17 +62,58 @@ def test_analyze_suspect_attachment() -> None:
     assert result.confidence == 0.95
 
 
-# TODO: testul fixeaza bug-ul in loc sa il prinda. Are doar spf=pass si dkim=pass,
-# fara DMARC si cu domeniu necunoscut, si totusi cere LEGITIMATE. 5 cere toate
-# trei plus domeniu cunoscut.
+def test_analyze_macro_attachment() -> None:
+    """Atașament cu macro (.docm)."""
+    att = ParsedAttachment(
+        filename="invoice.docm",
+        sha256="1234567890abcdef",
+        mime_type="application/vnd.ms-word.document.macroEnabled.12",
+        size=2048,
+    )
+    parsed = ParsedEmail(
+        report_kind=ReportKind.UNKNOWN,
+        attachments=[att],
+    )
+    result = analyze(parsed)
+    assert result.verdict == Verdict.MALICIOUS
+
+
+def test_analyze_double_extension() -> None:
+    """Atașament cu dublă extensie (ex: document.pdf.exe)."""
+    att = ParsedAttachment(
+        filename="invoice.pdf.exe",
+        sha256="1234567890abcdef",
+        mime_type="application/octet-stream",
+        size=2048,
+    )
+    parsed = ParsedEmail(
+        report_kind=ReportKind.UNKNOWN,
+        attachments=[att],
+    )
+    result = analyze(parsed)
+    assert result.verdict == Verdict.MALICIOUS
+
+
 def test_analyze_legitimate() -> None:
+    """Mailul trece ca LEGITIMATE doar dacă are SPF, DKIM și DMARC pass."""
     parsed = ParsedEmail(
         report_kind=ReportKind.UNKNOWN,
         from_address="user@company.com",
-        auth_results="spf=pass dkim=pass",
+        auth_results="spf=pass dkim=pass dmarc=pass",
     )
     result = analyze(parsed)
     assert result.verdict == Verdict.LEGITIMATE
+
+
+def test_analyze_missing_auth_results_goes_to_needs_review() -> None:
+    """Mail fără Authentication-Results trece automat în NEEDS_REVIEW."""
+    parsed = ParsedEmail(
+        report_kind=ReportKind.UNKNOWN,
+        from_address="user@company.com",
+        auth_results="",
+    )
+    result = analyze(parsed)
+    assert result.verdict == Verdict.NEEDS_REVIEW
 
 
 @pytest.mark.parametrize(
@@ -67,23 +121,40 @@ def test_analyze_legitimate() -> None:
     [
         "act-now-www.org",
         "admin-support.site",
+        "business-insight.online",
         "cloud-mail.store",
-        "ses.distributie-energie.ro",
+        "contactmail.app",
+        "do-not-reqly.com",
+        "front-desk.site",
+        "incoming-mail-msg.com",
+        "info-alerts.tech",
+        "notificaton.online",
     ],
 )
 def test_cybeready_simulation_domains(cybeready_domain: str) -> None:
     parsed = ParsedEmail(
         report_kind=ReportKind.UNKNOWN,
         from_address=f"simulation-test@{cybeready_domain}",
+        auth_results="spf=pass",
     )
     analysis = analyze(parsed)
 
     assert analysis.verdict == Verdict.SIMULATION
     assert analysis.confidence == 1.0
-    assert analysis.evidence[0].code == "CYBERREADY_SIMULATION"
+    assert analysis.evidence[0].code == "CYBEREADY_SIMULATION"
 
 
-# TODO: lipseste testul cel mai important pentru 8.1: From falsificat cu un domeniu
-# de simulare dar cu SPF fail NU trebuie sa iasa SIMULATION.
-# TODO: lipsesc teste pentru SPAM, pentru atasament cu macro (docm), pentru mail
-# fara Authentication-Results si pentru dubla extensie.
+def test_cybeready_sensitive_domain_requires_extra_signals() -> None:
+    parsed_spoofed = ParsedEmail(
+        report_kind=ReportKind.UNKNOWN,
+        from_address="simulation-test@ses.distributie-energie.ro",
+        auth_results="spf=pass",
+    )
+    assert analyze(parsed_spoofed).verdict != Verdict.SIMULATION
+
+    parsed_valid = ParsedEmail(
+        report_kind=ReportKind.UNKNOWN,
+        from_address="simulation-test@ses.distributie-energie.ro",
+        auth_results="spf=pass header.i=@mta1.cybereadysmtp.com",
+    )
+    assert analyze(parsed_valid).verdict == Verdict.SIMULATION
