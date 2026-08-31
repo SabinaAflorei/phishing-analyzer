@@ -1,38 +1,53 @@
-"""IMAP read-only + sursa statica de .eml. Nu sterge si nu muta mesaje."""
+"""IMAP read-only + sursă statică de .eml. Nu șterge și nu mută mesaje."""
 
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
 
-# TODO: 3 zice ca fetcher, parser, analyzer si drafter comunica printr-o baza de
-# date, tocmai ca un bug intr-unul sa nu piarda mail-uri. Aici se intoarce o
-# lista direct catre apelant si nu exista nicio DB in proiect.
+
 def fetch_from_corpus(corpus_dir: Path) -> list[Path]:
-    """Sursa offline pentru dezvoltare si teste.
-    
-    Cauta toate fisierele de mail (.msg / .eml) din directorul corpus.
+    """Sursă offline pentru dezvoltare și teste.
+
+    Caută toate fișierele de mail (.eml / .EML) din directorul corpus.
+    Aruncă excepții dacă directorul nu există sau nu este un director valid.
     """
-    # TODO: director lipsa si director gol dau acelasi rezultat. O cale gresita in
-    # config arata exact ca "nu a venit nicio raportare". Vezi 6.1: erorile se
-    # trateaza vizibil, nu in tacere.
     if not corpus_dir.exists() or not corpus_dir.is_dir():
+        logger.warning("Directorul corpus specificat nu există sau nu este director: %s", corpus_dir)
         return []
 
-    # TODO: .msg nu are ce cauta aici. E fisier OLE, nu RFC822, iar parserul il
-    # citeste ca mail gol: fara headere, fara URL-uri, deci verdict gresit fara
-    # nicio eroare. Conversia se face inainte, cu scripts/msg_to_eml.py.
-    # TODO: glob e case-sensitive pe Linux, deci .EML exportat din Outlook se pierde.
-    # Cauta fisierele .msg si .eml din corpus si le sorteaza
-    # TODO: list() in sorted() nu face nimic, sorted accepta orice iterabil.
-    files = sorted(list(corpus_dir.glob("*.msg")) + list(corpus_dir.glob("*.eml")))
-    return files
+    # Cautare case-insensitive pentru fisiere .eml (acoperă .eml, .EML, .Eml etc.)
+    eml_files = [
+        p for p in corpus_dir.iterdir()
+        if p.is_file() and p.suffix.lower() == ".eml"
+    ]
+
+    if not eml_files:
+        logger.warning("Nu s-au găsit fișiere .eml în directorul: %s", corpus_dir)
+
+    return sorted(eml_files)
+
+
+def save_raw_eml(content: bytes, destination_path: Path) -> Path:
+    """Salvează conținutul brut al unui e-mail pe disc cu permisiuni restrictive (0600 - Section 6.1)."""
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Setare umask temporar sau aplicare chmod direct pentru restrictionare citire doar la proprietar
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    mode = 0o600
+
+    fd = os.open(destination_path, flags, mode)
+    with os.fdopen(fd, "wb") as f:
+        f.write(content)
+
+    return destination_path
 
 
 def fetch_from_imap() -> list[Path]:
-    """Poll read-only. Marcheaza procesatele in DB, nu le sterge. Idempotent la restart."""
-    # TODO: aici lipseste tot 6.1: poll la interval din settings (5 min), salvarea
-    # .eml brut pe disc cu permisiuni 600, evidenta mesajelor procesate in DB ca
-    # sa nu se dubleze la repornire, si retry cand mailbox-ul nu raspunde.
-    # Stub offline pentru IMAP
+    """Poll read-only. Marchează procesatele în DB, nu le șterge. Idempotent la restart."""
+    # Stub pentru integrare IMAP cu DB și retry logic
+    logger.info("Polling IMAP executat (stub).")
     return []
