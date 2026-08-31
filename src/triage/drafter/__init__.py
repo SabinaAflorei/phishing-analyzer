@@ -38,10 +38,7 @@ def sanitize_for_model(text: str, max_chars: int = 2000) -> str:
     if len(clean_text) > max_chars:
         truncated = clean_text[:max_chars]
         last_space = truncated.rfind(" ")
-        if last_space > 0:
-            clean_text = truncated[:last_space]
-        else:
-            clean_text = truncated
+        clean_text = truncated[:last_space] if last_space > 0 else truncated
 
     return clean_text
 
@@ -96,9 +93,9 @@ def build_draft(analysis: Analysis, reporter_name: str, llm_client: Any = None) 
     """
     # Asigurare compatibilitate (daca verdictul vine ca string)
     try:
-        verdict_obj = Verdict(analysis.verdict)
+      verdict_obj = Verdict(analysis.verdict)
     except ValueError:
-        raise ValueError(f"Verdict necunoscut sau invalid: {analysis.verdict}")
+      raise ValueError(f"Verdict necunoscut sau invalid: {analysis.verdict}") from None
 
     if verdict_obj == Verdict.NEEDS_REVIEW:
         return ""
