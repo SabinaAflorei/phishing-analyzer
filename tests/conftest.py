@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import pytest_socket  # type: ignore[import-untyped]
 from pytest_socket import enable_socket, socket_allow_hosts
 
 CORPUS = Path(__file__).parent.parent / "corpus" / "eml"

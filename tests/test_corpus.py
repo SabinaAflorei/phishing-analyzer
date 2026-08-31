@@ -16,6 +16,7 @@ from __future__ import annotations
 import email
 from email import policy
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 import yaml
@@ -70,7 +71,7 @@ def test_eml_se_parseaza(case: str) -> None:
     nu are voie sa arunce."""
     path = EML_DIR / f"{case}.eml"
     with path.open("rb") as fh:
-        msg = email.message_from_binary_file(fh, policy=policy.default)
+        msg = email.message_from_binary_file(fh, policy=cast(Any, policy.default))
     assert msg is not None
     list(msg.walk())  # structura MIME e traversabila cap-coada
 

@@ -18,5 +18,5 @@ def test_defang_is_idempotent_enough() -> None:
     assert "http://" not in once
 
 
-def test_refang():
+def test_refang() -> None:
     assert refang("hxxps[://]example[.]com") == "https://example.com"
