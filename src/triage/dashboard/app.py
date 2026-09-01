@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 BASE_DIR = Path(__file__).parent
 app = FastAPI(title="Phishing triage", docs_url=None, redoc_url=None)
 
-# Creăm directorul static dacă nu există pentru a preveni erorile de montare
+# Creare directorul static pentru a preveni erorile de montare
 (BASE_DIR / "static").mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
@@ -22,8 +22,18 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 def get_mock_reports() -> list[dict[str, Any]]:
     """Returnează lista de rapoarte din coadă."""
-    # În producție/integrat, se conectează la stocarea de analize/rapoarte
-    return []
+    return [
+        {
+            "id": "rep-101",
+            "subject": "Test Phishing",
+            "from_address": "attacker@bad.com",
+            "verdict": "MALICIOUS",
+            "confidence": 0.95,
+            "evidence": ["SPF Failed"],
+            "defanged_urls": ["hxxp[://]bad[.]com"],
+            "draft": "Răspuns test",
+        }
+    ]
 
 @app.get("/", response_class=HTMLResponse)
 async def queue(request: Request) -> HTMLResponse:
