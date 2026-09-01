@@ -1,9 +1,27 @@
 from __future__ import annotations
 
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from triage.dashboard.app import app
 
 client = TestClient(app)
+
+MOCK_REPORTS = [
+    {
+        "id": "1",
+        "file_name": "01_cyberready_forward.eml",
+        "subject": "Test Phishing Subject",
+        "from_address": "test@example.com",
+        "reporter": "test@example.com",
+        "received_at": "2026-08-30 10:00",
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "status": "NEW",
+        "evidence": ["SPF Failure"],
+        "defanged_urls": ["hxxp[://]bad[.]com"],
+        "draft": "Ciorna de raspuns",
+    }
+]
 
 
 def test_healthz() -> None:
@@ -13,18 +31,20 @@ def test_healthz() -> None:
 
 
 def test_queue_page() -> None:
-    response = client.get("/")
-    assert response.status_code == 200
-    assert "Triaj raportari phishing" in response.text
-    # Verificare existenta elementului mock în tabel
-    assert "MALICIOUS" in response.text
-
-
-def test_report_detail_not_found() -> None:
-    response = client.get("/report/non_existent_id")
-    assert response.status_code == 404
+    with patch("triage.dashboard.app.load_real_reports", return_value=MOCK_REPORTS):
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Test Phishing Subject" in response.text
 
 
 def test_report_detail_found() -> None:
-    response = client.get("/report/rep-101")
-    assert response.status_code == 200
+    with patch("triage.dashboard.app.load_real_reports", return_value=MOCK_REPORTS):
+        response = client.get("/report/1")
+        assert response.status_code == 200
+        assert "Test Phishing Subject" in response.text
+
+
+def test_report_detail_not_found() -> None:
+    with patch("triage.dashboard.app.load_real_reports", return_value=MOCK_REPORTS):
+        response = client.get("/report/999")
+        assert response.status_code == 404

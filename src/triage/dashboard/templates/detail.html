@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Detalii Raport {{ report.id }}{% endblock %}
+
+{% block content %}
+<p><a href="/">&larr; Înapoi la coadă</a></p>
+
+<h2>Raport {{ report.id }}</h2>
+
+<h1>{{ report.subject }}</h1>
+
+<table>
+  <tr><th>Data primire</th><td>{{ report.received_at }}</td></tr>
+  <tr><th>Raportor</th><td>{{ report.reporter }}</td></tr>
+  <tr><th>Subiect</th><td>{{ report.subject }}</td></tr>
+  <tr><th>Verdict</th><td class="{{ report.verdict }}"><strong>{{ report.verdict }}</strong></td></tr>
+  <tr><th>Încredere</th><td>{{ report.confidence }}</td></tr>
+  <tr><th>Status</th><td>{{ report.status }}</td></tr>
+</table>
+
+<h3>Probe / Evidence</h3>
+<ul>
+  {% for item in report.evidence %}
+    <li><code>{{ item }}</code></li>
+  {% else %}
+    <li>Fără probe înregistrate.</li>
+  {% endfor %}
+</ul>
+
+{% if report.draft %}
+  <h3>Ciornă Răspuns Generată</h3>
+  <pre><code>{{ report.draft }}</code></pre>
+{% endif %}
+{% endblock %}

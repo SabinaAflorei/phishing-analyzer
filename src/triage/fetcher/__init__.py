@@ -32,7 +32,7 @@ def fetch_from_corpus(corpus_dir: Path) -> list[Path]:
 
 
 def save_raw_eml(content: bytes, destination_path: Path) -> Path:
-    """Salvează conținutul brut al unui e-mail pe disc cu permisiuni restrictive (0600 - Section 6.1)."""
+    """Salvează conținutul brut al unui e-mail pe disc cu permisiuni restrictive ."""
     destination_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Setare umask temporar sau aplicare chmod direct pentru restrictionare citire doar la proprietar
