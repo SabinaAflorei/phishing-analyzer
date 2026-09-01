@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ from triage.drafter import build_draft
 from triage.fetcher import fetch_from_corpus
 from triage.parser import parse_report
 
+logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent
 PROJECT_ROOT = BASE_DIR.parents[2]
 CORPUS_DIR = PROJECT_ROOT / "corpus" / "eml"
@@ -24,7 +26,6 @@ app = FastAPI(title="Phishing triage", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-
 
 def load_real_reports() -> list[dict[str, Any]]:
     """Încarcă și procesează automat toate e-mailurile din corpus/eml."""
@@ -65,7 +66,8 @@ def load_real_reports() -> list[dict[str, Any]]:
                 "defanged_urls": defanged_urls,
                 "draft": draft_text,
             })
-        except Exception:
+        except Exception as err:
+            logger.exception("Eroare la procesarea fișierului %s: %s", eml_path, err)
             continue
 
     return reports
