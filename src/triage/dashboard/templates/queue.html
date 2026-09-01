@@ -1,22 +1,63 @@
 {% extends "base.html" %}
+
+{% block title %}Coada de Rapoarte Phishing{% endblock %}
+
 {% block content %}
-<table>
-  <thead>
-    <tr><th>Data</th><th>Raportor</th><th>Subiect</th><th>Verdict</th><th>Incredere</th><th>Status</th></tr>
-  </thead>
-  <tbody>
-    {% for r in reports %}
-    <tr>
-      <td>{{ r.received_at }}</td>
-      <td>{{ r.reporter }}</td>
-      <td>{{ r.subject }}</td>
-      <td class="{{ r.verdict }}">{{ r.verdict }}</td>
-      <td>{{ r.confidence }}</td>
-      <td>{{ r.status }}</td>
-    </tr>
-    {% else %}
-    <tr><td colspan="6">Coada e goala.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<h2>Coada de Rapoarte</h2>
+
+<form id="bulk-form" method="post" action="/bulk-action">
+    <div style="margin-bottom: 15px; background: #e9ecef; padding: 10px; border-radius: 4px; display: flex; gap: 10px; align-items: center;">
+        <strong>Actiuni pentru elementele selectate:</strong>
+        <select name="bulk_status" style="padding: 5px;">
+            <option value="NEW">Marcheaza ca NOU (NEW)</option>
+            <option value="SENT">Marcheaza ca TRIMIS (SENT)</option>
+            <option value="ESCALATED">Marcheaza ca ESCALAT (ESCALATED)</option>
+        </select>
+        <button type="submit" style="background-color: #007bff; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">
+            Aplica
+        </button>
+    </div>
+
+    <table border="1" style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr>
+                <th><input type="checkbox" id="select-all" onclick="toggleAll(this)"></th>
+                <th>ID</th>
+                <th>Subiect</th>
+                <th>Raportor</th>
+                <th>Verdict</th>
+                <th>Încredere</th>
+                <th>Status</th>
+                <th>Actiune</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for report in reports %}
+            <tr>
+                <td><input type="checkbox" name="selected_ids" value="{{ report.id }}" class="report-checkbox"></td>
+                <td>{{ report.id }}</td>
+                <td><a href="/report/{{ report.id }}">{{ report.subject }}</a></td>
+                <td>{{ report.reporter }}</td>
+                <td><span class="badge {{ report.verdict }}">{{ report.verdict }}</span></td>
+                <td>{{ report.confidence }}</td>
+                <td>{{ report.status }}</td>
+                <td><a href="/report/{{ report.id }}">Detaliu</a></td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="8">Nu exista rapoarte in coada.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</form>
+
+<script>
+function toggleAll(source) {
+    checkboxes = document.getElementsByClassName('report-checkbox');
+    for(var i=0, n=checkboxes.length;i<n;i++) {
+        checkboxes[i].checked = source.checked;
+    }
+}
+</script>
 {% endblock %}

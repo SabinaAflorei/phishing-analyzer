@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 from triage.dashboard.app import app
+from triage.dashboard.app import load_real_reports
 
 client = TestClient(app)
 
@@ -48,3 +49,8 @@ def test_report_detail_not_found() -> None:
     with patch("triage.dashboard.app.load_real_reports", return_value=MOCK_REPORTS):
         response = client.get("/report/999")
         assert response.status_code == 404
+
+def test_load_real_reports_execution() -> None:
+    # Ruleaza functia direct pentru a acoperi liniile de procesare corpus
+    reports = load_real_reports()
+    assert isinstance(reports, list)

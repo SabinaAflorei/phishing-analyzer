@@ -100,16 +100,36 @@ def is_cybeready_simulation(parsed: ParsedEmail) -> bool:
     if spf_fail:
         return False
 
-    if domain == "ses.distributie-energie.ro":
-        suffixes = CYBEREADY_CONFIG.get("message_id_suffixes", ["@mta1.cybereadysmtp.com"])
-        ips = CYBEREADY_CONFIG.get("sender_ips", [])
-        return any(suf.lower() in auth_lower for suf in suffixes) or any(
-            ip in auth_lower for ip in ips
-        )
-
-    return domain in ALL_CYBEREADY_DOMAINS or any(
+    is_cyberready_domain = domain in ALL_CYBEREADY_DOMAINS or any(
         is_subdomain_of(domain, cb_dom) for cb_dom in ALL_CYBEREADY_DOMAINS
     )
+
+    if not is_cyberready_domain:
+        return False
+
+    suffixes = CYBEREADY_CONFIG.get("message_id_suffixes", [])
+    ips = CYBEREADY_CONFIG.get("sender_ips", [])
+
+    has_extra_signal = any(suf.lower() in auth_lower for suf in suffixes if suf) or any(
+        ip in auth_lower for ip in ips if ip
+    )
+
+    if has_extra_signal:
+        return True
+    
+    yaml_domains = {str(d).lower().strip() for d in CYBEREADY_CONFIG.get("sender_domains", [])}
+    legacy_domains = {str(d).lower().strip() for d in CYBEREADY_LEGACY_DOMAINS}
+    
+    sensitive_domains = yaml_domains - legacy_domains
+
+    is_sensitive = domain in sensitive_domains or any(
+        is_subdomain_of(domain, sd) for sd in sensitive_domains
+    )
+
+    if is_sensitive:
+        return False
+
+    return True
 
 
 def analyze(parsed: ParsedEmail) -> Analysis:
@@ -180,6 +200,18 @@ def analyze(parsed: ParsedEmail) -> Analysis:
         )
         return Analysis(verdict=Verdict.LEGITIMATE, confidence=0.85, evidence=evidence_list)
 
+
+    if parsed.report_kind == ReportKind.SPAM:
+        evidence_list.append(
+            Evidence(
+                code="REPORTED_AS_SPAM",
+                severity=Severity.LOW,
+                description="Mesajul este raportat ca fiind spam.",
+            )
+        )
+        return Analysis(verdict=Verdict.SPAM, confidence=0.85, evidence=evidence_list)
+        
+
     # 6. Fallback Implicit -> NEEDS_REVIEW
     evidence_list.append(
         Evidence(
@@ -189,3 +221,5 @@ def analyze(parsed: ParsedEmail) -> Analysis:
         )
     )
     return Analysis(verdict=Verdict.NEEDS_REVIEW, confidence=0.5, evidence=evidence_list)
+
+#yaml

@@ -11,6 +11,11 @@ from triage.drafter.prompts import STATIC_TEMPLATES, SYSTEM_PROMPTS, split_email
 from triage.verdicts import Analysis, Verdict
 
 logger = logging.getLogger(__name__)
+GENERIC_TERMS = {
+    "scan", "serviciul", "service", "no-reply", "noreply", 
+    "support", "admin", "notification", "notifications", "info",
+    "helpdesk", "ticketing", "desk", "system", "securitate"
+}
 
 
 def sanitize_for_model(text: str, max_chars: int = 2000) -> str:
@@ -43,31 +48,32 @@ def sanitize_for_model(text: str, max_chars: int = 2000) -> str:
     return clean_text
 
 
-def extract_first_name(reporter_name: str) -> str:
-    """Extrage și curăță prenumele din numele raportorului.
-    Gestionează formatele 'Popescu, Ion', adrese de e-mail sau nume simple.
-    """
-    if not reporter_name:
-        return "Coleg"
+def extract_first_name(from_header: str) -> str | None:
+    """Extrage primul nume valid. Returnează None dacă este un nume generic de sistem."""
+    if not from_header or from_header == "Necunoscut":
+        return None
 
-    # Sanitizare newline-uri sau taguri
-    cleaned = re.sub(r"[<>\"\r\n]", "", reporter_name).strip()
+    # Curatare partea de Display Name (dinaintea adresei din <...>)
+    display_name = from_header.split("<")[0].replace('"', '').strip()
+    
+    if not display_name and "@" in from_header:
+        display_name = from_header.split("@")[0].replace("<", "").strip()
 
-    if "@" in cleaned:
-        cleaned = cleaned.split("@")[0].replace(".", " ")
+    if not display_name:
+        return None
 
-    # Formatul "Nume, Prenume"
-    if "," in cleaned:
-        parts = [p.strip() for p in cleaned.split(",") if p.strip()]
-        if len(parts) >= 2:
-            return parts[1].split()[0].capitalize()
-        cleaned = parts[0]
+    if "," in display_name:
+        parts = display_name.split(",")
+        if len(parts) > 1 and parts[1].strip():
+            display_name = parts[1].strip()
 
-    parts = cleaned.split()
-    if parts:
-        return parts[0].capitalize()
+    first_word = display_name.split()[0] if display_name else ""
+    first_word_clean = re.sub(r'[^a-zA-ZăâîșțĂÂÎȘȚ-]', '', first_word)
 
-    return "Coleg"
+    if not first_word_clean or first_word_clean.lower() in GENERIC_TERMS or len(first_word_clean) < 2:
+        return None
+
+    return first_word_clean.capitalize()
 
 
 def _format_evidence_for_prompt(analysis: Analysis) -> str:
@@ -91,11 +97,10 @@ def build_draft(analysis: Analysis, reporter_name: str, llm_client: Any = None) 
     Trage din Ollama (dacă este furnizat/disponibil) și validează outputul cu split_email.
     Fallback automat pe șabloanele statice dacă modelul eșuează sau dă un output invalid.
     """
-    # Asigurare compatibilitate (daca verdictul vine ca string)
     try:
-      verdict_obj = Verdict(analysis.verdict)
+        verdict_obj = Verdict(analysis.verdict)
     except ValueError:
-      raise ValueError(f"Verdict necunoscut sau invalid: {analysis.verdict}") from None
+        raise ValueError(f"Verdict necunoscut sau invalid: {analysis.verdict}") from None
 
     if verdict_obj == Verdict.NEEDS_REVIEW:
         return ""
@@ -103,18 +108,18 @@ def build_draft(analysis: Analysis, reporter_name: str, llm_client: Any = None) 
     prenume = extract_first_name(reporter_name)
     verdict_key = verdict_obj.name
 
+    # Construim formula de salut dinamica
+    prenume_str = f", {prenume}" if prenume else ""
+
     # 1. Incercare de generare dinamica via LLM / Ollama
     if llm_client is not None:
         try:
             system_prompt = SYSTEM_PROMPTS.get(verdict_key)
             if system_prompt:
                 evidence_text = _format_evidence_for_prompt(analysis)
-                user_message = (
-                    f"Prenume coleg: {prenume}\n"
-                    f"Dovezi analiză:\n{evidence_text}"
-                )
+                prompt_prenume = f"Prenume coleg: {prenume}\n" if prenume else "Prenume coleg: Necunoscut (Folosește doar 'Bună ziua,')\n"
+                user_message = f"{prompt_prenume}Dovezi analiză:\n{evidence_text}"
 
-                # Generare text
                 response_text = llm_client.generate(
                     system_prompt=system_prompt,
                     prompt=user_message,
@@ -125,15 +130,12 @@ def build_draft(analysis: Analysis, reporter_name: str, llm_client: Any = None) 
                     greeting, body, closing = split_email(str(response_text))
                     if greeting and body and closing:
                         return str(response_text).strip()
-                    logger.warning(
-                        "Răspunsul LLM nu a trecut de validarea split_email. Se folosește fallback static."
-                    )
         except Exception as err:
             logger.error("Eroare la generarea draftului cu LLM: %s. Se folosește fallback-ul.", err)
 
-    # 2. Fallback static 
+    # 2. Fallback static
     template = STATIC_TEMPLATES.get(verdict_key)
     if not template:
         raise ValueError(f"Nu există șablon static pentru verdictul: {verdict_key}")
 
-    return template.format(prenume=prenume)
+    return template.format(prenume=prenume_str)

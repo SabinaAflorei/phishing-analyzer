@@ -73,7 +73,7 @@ def test_build_draft_legitimate() -> None:
 def test_build_draft_empty_reporter_name() -> None:
     analysis = Analysis(verdict=Verdict.MALICIOUS, confidence=0.9)
     draft = build_draft(analysis, "")
-    assert "Bună ziua, Coleg," in draft
+    assert draft.startswith("Bună ziua,\n\n")  
 
 
 def test_static_templates_valid_email_structure() -> None:

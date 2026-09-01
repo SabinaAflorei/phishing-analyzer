@@ -117,14 +117,14 @@ SYSTEM_PROMPTS: dict[str, str] = {
 
 STATIC_TEMPLATES: dict[str, str] = {
     "SIMULATION": (
-        "Bună ziua, {prenume},\n\n"
+        "Bună ziua{prenume},\n\n"
         "Vă mulțumim pentru mesajul dumneavoastră. Raportarea a fost înregistrată "
         "și urmează să fie analizată de echipa de securitate. Vă vom contacta dacă "
         "avem nevoie de detalii suplimentare din partea dumneavoastră.\n\n"
         "Cu stimă,"
     ),
     "MALICIOUS": (
-        "Bună ziua, {prenume},\n\n"
+        "Bună ziua{prenume},\n\n"
         "Vă mulțumim pentru raportare. Am verificat mesajul și este într-adevăr unul "
         "periculos, așa că vă rugăm să îl ștergeți din căsuța dumneavoastră. Ne puteți "
         "confirma dacă ați accesat linkul din mesaj sau dacă v-ați introdus undeva "
@@ -132,7 +132,7 @@ STATIC_TEMPLATES: dict[str, str] = {
         "Cu stimă,"
     ),
     "SPAM": (
-        "Bună ziua, {prenume},\n\n"
+        "Bună ziua{prenume},\n\n"
         "Vă mulțumim pentru raportare. Am verificat mesajul și este publicitate "
         "nesolicitată, care nu prezintă un risc pentru dumneavoastră sau pentru "
         "companie. Vă recomandăm blocarea expeditorului sau folosirea opțiunii de "
@@ -140,7 +140,7 @@ STATIC_TEMPLATES: dict[str, str] = {
         "Cu stimă,"
     ),
     "LEGITIMATE": (
-        "Bună ziua, {prenume},\n\n"
+        "Bună ziua{prenume},\n\n"
         "Vă mulțumim pentru raportare. Am verificat mesajul și este unul legitim, așa "
         "că îl puteți folosi în siguranță. Ați procedat corect că ni l-ați semnalat și "
         "vă încurajăm să faceți la fel ori de câte ori un mesaj vi se pare suspect.\n\n"
@@ -148,9 +148,7 @@ STATIC_TEMPLATES: dict[str, str] = {
     ),
 }
 
-
 CLOSING = "Cu stimă,"
-
 
 def split_email(text: str) -> tuple[str, str, str]:
     """Împarte răspunsul în (salut, corp, încheiere).

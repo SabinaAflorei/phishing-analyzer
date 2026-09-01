@@ -7,12 +7,14 @@ from dataclasses import dataclass, field
 from email import message_from_bytes
 from enum import StrEnum
 from bs4 import BeautifulSoup
+from email.message import Message
 
 class ReportKind(StrEnum):
     FORWARD_INLINE = "FORWARD_INLINE"
     ATTACHED_EML = "ATTACHED_EML"
     SCREENSHOT_ONLY = "SCREENSHOT_ONLY"  # -> NEEDS_REVIEW
     UNKNOWN = "UNKNOWN"
+    SPAM="SPAM"
 
 
 @dataclass(slots=True)
@@ -63,25 +65,49 @@ def detect_report_kind(raw: bytes) -> ReportKind:
 def parse_report(raw: bytes) -> ParsedEmail:
     msg = message_from_bytes(raw)
     kind = detect_report_kind(raw)
-    # extragere headere
+
+    # 1. Daca e e-mail atasat, extragem mesajul tinta din atasament
+    if kind == ReportKind.ATTACHED_EML:
+     for part in msg.walk():
+        content_type = part.get_content_type()
+        filename = (part.get_filename() or "").lower()
+        if content_type == "message/rfc822" or filename.endswith(".eml"):
+            payload = part.get_payload()
+            
+            if isinstance(payload, list) and payload:
+                first_item = payload[0]
+                if isinstance(first_item, Message):
+                    msg = first_item
+                    break
+            # daca payload este direct o instanta de Message
+            elif isinstance(payload, Message):
+                msg = payload
+                break
+            # daca payload-ul este bytes brut
+            elif isinstance(payload, bytes):
+                msg = message_from_bytes(payload)
+                break
+
+    # 2. Extragere headere din mail-ul original
     subject = msg.get("Subject", "")
     from_address = msg.get("From", "")
     reply_to = msg.get("Reply-To", "")
     return_path = msg.get("Return-Path", "")
     auth_results = msg.get("Authentication-Results", "")
     received_chain = msg.get_all("Received", [])
+    
     body_text_parts = []
     urls = set()
     attachments = []
-    # Regex simplu pentru găsirea URL-urilor în text brut
+
     url_pattern = re.compile(r"https?://[^\s<>\"']+")
     for part in msg.walk():
         content_type = part.get_content_type()
         disposition = str(part.get("Content-Disposition", ""))
-        # Procesare atașamente
+        
         if "attachment" in disposition or part.get_filename():
             payload = part.get_payload(decode=True)
-            if isinstance(payload,bytes):
+            if isinstance(payload, bytes):
                 filename = part.get_filename() or "unnamed"
                 sha256 = hashlib.sha256(payload).hexdigest()
                 size = len(payload)
@@ -94,23 +120,22 @@ def parse_report(raw: bytes) -> ParsedEmail:
                     )
                 )
             continue
-        # Procesare corp text / HTML
+
         if content_type == "text/plain":
             payload = part.get_payload(decode=True)
-            if isinstance(payload,bytes):
+            if isinstance(payload, bytes):
                 text = payload.decode(errors="replace")
                 body_text_parts.append(text)
                 for match in url_pattern.findall(text):
                     urls.add(match)
         elif content_type == "text/html":
             payload = part.get_payload(decode=True)
-            if isinstance(payload,bytes):
+            if isinstance(payload, bytes):
                 html_content = payload.decode(errors="replace")
                 soup = BeautifulSoup(html_content, "html.parser")
-                # Extragem URL-urile din tag-urile <a>
                 for a_tag in soup.find_all("a", href=True):
                     urls.add(a_tag["href"])
-                    
+
     return ParsedEmail(
         report_kind=kind,
         subject=subject,

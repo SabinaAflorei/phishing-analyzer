@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Statistici & Metrice Calitate{% endblock %}
+
+{% block content %}
+<p><a href="/">&larr; Inapoi la coada</a></p>
+<h2>Statistici Calitate Sistem</h2>
+
+<div style="display: flex; gap: 20px; margin-top: 20px;">
+  <div style="border: 1px solid #ccc; padding: 15px; border-radius: 5px;">
+    <h3>Acceptare Draft-uri (Tinta: >90%)</h3>
+    <p style="font-size: 2em; font-weight: bold; color: green;">{{ stats.acceptance_rate }}%</p>
+    <small>{{ stats.unchanged_drafts }} din {{ stats.total_processed }} trimise neschimbate</small>
+  </div>
+  <div style="border: 1px solid #ccc; padding: 15px; border-radius: 5px;">
+    <h3>Corectii Verdict</h3>
+    <p style="font-size: 2em; font-weight: bold;">{{ stats.overrides_count }}</p>
+    <small>Verdicte modificate manual de analist</small>
+  </div>
+</div>
+{% endblock %}

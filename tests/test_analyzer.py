@@ -158,3 +158,35 @@ def test_cybeready_sensitive_domain_requires_extra_signals() -> None:
         auth_results="spf=pass header.i=@mta1.cybereadysmtp.com",
     )
     assert analyze(parsed_valid).verdict == Verdict.SIMULATION
+
+def test_analyze_empty_from_address_goes_to_needs_review() -> None:
+    """Mail fără adresă From validează fallback-ul pe NEEDS_REVIEW."""
+    parsed = ParsedEmail(
+        report_kind=ReportKind.UNKNOWN,
+        from_address="",
+        auth_results="spf=pass",
+    )
+    result = analyze(parsed)
+    assert result.verdict == Verdict.NEEDS_REVIEW
+
+
+def test_analyze_malformed_from_header() -> None:
+    """Format de From neobișnuit sau malformat."""
+    parsed = ParsedEmail(
+        report_kind=ReportKind.UNKNOWN,
+        from_address="<<<invalid_email>>>",
+        auth_results="spf=pass",
+    )
+    result = analyze(parsed)
+    assert result.verdict == Verdict.NEEDS_REVIEW
+
+
+def test_analyze_partial_auth_pass_goes_to_needs_review() -> None:
+    """Pass pe SPF și DKIM, dar fără DMARC pass -> nu trece automat la LEGITIMATE."""
+    parsed = ParsedEmail(
+        report_kind=ReportKind.UNKNOWN,
+        from_address="user@company.com",
+        auth_results="spf=pass dkim=pass dmarc=none",
+    )
+    result = analyze(parsed)
+    assert result.verdict == Verdict.NEEDS_REVIEW

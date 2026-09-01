@@ -40,7 +40,9 @@ from email.message import EmailMessage
 from email.parser import HeaderParser
 from email.policy import SMTP
 from pathlib import Path
+from triage.storage import save_secure_file
 from typing import Any
+
 
 try:
     import extract_msg
@@ -254,9 +256,9 @@ def main() -> int:
             dst = args.outdir / (src.stem + ".eml")
         else:
             dst = src.with_suffix(".eml")
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_bytes(raw)
-        dst.chmod(0o600)
+            
+        # Salvare securizată cu permisiuni 0o600
+        save_secure_file(dst, raw)
         print(f"{src} -> {dst}  ({len(raw)} octeti)")
     return 0
 
