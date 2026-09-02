@@ -19,7 +19,7 @@ def fetch_from_corpus(corpus_dir: Path) -> list[Path]:
         logger.warning("Directorul corpus specificat nu există sau nu este director: %s", corpus_dir)
         return []
 
-    # Cautare case-insensitive pentru fisiere .eml (acoperă .eml, .EML, .Eml etc.)
+    # Cautare case-insensitive pentru fisiere .eml 
     eml_files = [
         p for p in corpus_dir.iterdir()
         if p.is_file() and p.suffix.lower() == ".eml"
@@ -48,6 +48,6 @@ def save_raw_eml(content: bytes, destination_path: Path) -> Path:
 
 def fetch_from_imap() -> list[Path]:
     """Poll read-only. Marchează procesatele în DB, nu le șterge. Idempotent la restart."""
-    # Stub pentru integrare IMAP cu DB și retry logic
+    # Stub pentru integrare IMAP cu DB si retry logic
     logger.info("Polling IMAP executat (stub).")
     return []

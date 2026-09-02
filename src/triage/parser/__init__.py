@@ -13,6 +13,7 @@ from email.header import decode_header
 import base64
 import urllib.parse
 import quopri
+from contextlib import suppress
 
 class ReportKind(StrEnum):
     FORWARD_INLINE = "FORWARD_INLINE"
@@ -70,13 +71,11 @@ def _decode_part_payload(part: Message) -> str:
     if not payload or not isinstance(payload, bytes):
         return ""
 
-    # Rezolvare Quoted-Printable dacă decode=True a ratat din cauza headerelor corupte
     cte = str(part.get("Content-Transfer-Encoding", "")).lower()
     if cte == "quoted-printable":
-        try:
+        with suppress(Exception):
             payload = quopri.decodestring(payload)
-        except Exception:
-            pass
+        
 
     charset = part.get_content_charset() or "utf-8"
 
@@ -94,7 +93,6 @@ def decode_mime_header(header_value: str | None) -> str:
 
     text = str(header_value)
 
-    # 1. Încercăm mai întâi decodarea standard din librăria Python
     try:
         parts = decode_header(text)
         decoded_chunks = []
@@ -113,12 +111,10 @@ def decode_mime_header(header_value: str | None) -> str:
                 decoded_chunks.append(str(fragment))
         text = " ".join(decoded_chunks)
     except Exception:
-        pass
-
-    # 2. Dacă au rămas taguri de tip =?utf-8?b?...?= ne-decodate de decode_header
+        pass  # noqa : S110
+    
     def decode_b64(match: Match[str]) -> str:
         b64_str = match.group(1).strip()
-        # Curățăm caracterele invalide din base64
         b64_str = re.sub(r"[^A-Za-z0-9+/=]", "", b64_str)
         missing_padding = len(b64_str) % 4
         if missing_padding:
@@ -141,15 +137,13 @@ def decode_mime_header(header_value: str | None) -> str:
     text = re.sub(r"=\?[uU][tT][fF]-8\?[bB]\?([^?]*)\?=", decode_b64, text)
     text = re.sub(r"=\?[uU][tT][fF]-8\?[qQ]\?([^?]*)\?=", decode_qp, text)
 
-    # 3. Curățare secvențe izolate Quoted-Printable remaining (=C4=83, =C8=9B etc)
     text = text.replace("_", " ")
     text = re.sub(r"=([0-9A-Fa-f]{2})", r"%\1", text)
     try:
         text = urllib.parse.unquote(text, encoding="utf-8", errors="replace")
     except Exception:
-        pass
+        pass # noqa : S110, SIM105
 
-    # Curățăm spațiile duble și egalurile izolate de la îmbinarea tagurilor MIME
     text = re.sub(r"\s+=\s+", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
@@ -181,7 +175,6 @@ def parse_report(raw: bytes) -> ParsedEmail:
     msg = message_from_bytes(raw)
     kind = detect_report_kind(raw)
 
-    # 1. Dacă e e-mail atașat, extragem mesajul țintă din atașament
     if kind == ReportKind.ATTACHED_EML:
         for part in msg.walk():
             content_type = part.get_content_type()
@@ -201,8 +194,6 @@ def parse_report(raw: bytes) -> ParsedEmail:
                     msg = message_from_bytes(payload)
                     break
 
-    # 2. Extragere headere din mail-ul țintă
-    # FIX 1: Apelăm decode_mime_header pe subiect!
     raw_subject = msg.get("Subject", "")
     subject = decode_mime_header(raw_subject)
 
@@ -219,7 +210,6 @@ def parse_report(raw: bytes) -> ParsedEmail:
     url_pattern = re.compile(r"https?://[^\s<>\"']+")
 
     for part in msg.walk():
-        # Ignorăm containerele multipart generale
         if part.is_multipart():
             continue
 
@@ -242,7 +232,6 @@ def parse_report(raw: bytes) -> ParsedEmail:
                 )
             continue
 
-        # FIX 2: Extragere și decodare curată corp Plain Text
         if content_type == "text/plain":
             text = _decode_part_payload(part)
             text = _clean_body_text(text)
@@ -251,7 +240,6 @@ def parse_report(raw: bytes) -> ParsedEmail:
                 for match in url_pattern.findall(text):
                     urls.add(match)
 
-        # FIX 3: Extragere corp din HTML dacă nu există o parte text/plain
         elif content_type == "text/html":
             html_content = _decode_part_payload(part)
             soup = BeautifulSoup(html_content, "html.parser")
