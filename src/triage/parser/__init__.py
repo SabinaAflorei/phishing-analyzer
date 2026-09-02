@@ -93,7 +93,7 @@ def decode_mime_header(header_value: str | None) -> str:
 
     text = str(header_value)
 
-    try:
+    with suppress(Exception):
         parts = decode_header(text)
         decoded_chunks = []
         for fragment, encoding in parts:
@@ -109,9 +109,7 @@ def decode_mime_header(header_value: str | None) -> str:
                     )
             else:
                 decoded_chunks.append(str(fragment))
-        text = " ".join(decoded_chunks)
-    except Exception:
-        pass  # noqa : S110
+        text = " ".join(decoded_chunks) 
     
     def decode_b64(match: Match[str]) -> str:
         b64_str = match.group(1).strip()
@@ -139,10 +137,9 @@ def decode_mime_header(header_value: str | None) -> str:
 
     text = text.replace("_", " ")
     text = re.sub(r"=([0-9A-Fa-f]{2})", r"%\1", text)
-    try:
-        text = urllib.parse.unquote(text, encoding="utf-8", errors="replace")
-    except Exception:
-        pass # noqa : S110, SIM105
+    
+    with suppress(Exception):
+           text= urllib.parse.unquote(text, encoding="utf-8", errors="replace")
 
     text = re.sub(r"\s+=\s+", " ", text)
     return re.sub(r"\s+", " ", text).strip()
