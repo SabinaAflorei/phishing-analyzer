@@ -23,7 +23,7 @@ def _find_config_dir() -> Path:
         current = current.parent
     return Path(__file__).resolve().parent.parent.parent.parent / "config"
 
-
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = _find_config_dir()
 
 
@@ -31,7 +31,7 @@ def load_yaml_config(file_name: str) -> dict[str, Any]:
     """Încarcă un fișier de configurație YAML din directorul config."""
     config_path = CONFIG_DIR / file_name
     if config_path.exists():
-        with config_path.open(encoding="utf-8") as f:
+        with config_path.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     return {}
 
@@ -63,13 +63,22 @@ CYBEREADY_MSG_ID_SUFFIXES = set(CYBEREADY_CONFIG.get("message_id_suffixes", []))
 CYBEREADY_HEADER_MARKERS = CYBEREADY_CONFIG.get("header_markers", {})
 
 # Extensii de atasamente suspecte din attachment_rules.yaml
-SUSPECT_EXTENSIONS = (
+raw_extensions = (
     set(ATTACHMENT_CONFIG.get("executable_extensions", []))
     | set(ATTACHMENT_CONFIG.get("script_extensions", []))
-    | set(ATTACHMENT_CONFIG.get("macro_extensions", []))
-    | {".exe", ".scr", ".vbs", ".bat", ".cmd", ".iso", ".img", ".ps1", ".docm", ".xlsm", ".pptm", ".com", ".pif", ".js", ".jse", ".wsf", ".hta", ".lnk", ".msi"
-    }
+    | set(ATTACHMENT_CONFIG.get("macro_enabled_extensions", []))
 )
+
+# Adaugare ".exe" și "exe" pentru a preveni bug-urile de parsare
+SUSPECT_EXTENSIONS = set()
+for ext in raw_extensions:
+    ext_clean = ext.lower().strip()
+    SUSPECT_EXTENSIONS.add(ext_clean)
+    if ext_clean.startswith("."):
+        SUSPECT_EXTENSIONS.add(ext_clean[1:])  # varianta fara punct
+    else:
+        SUSPECT_EXTENSIONS.add(f".{ext_clean}")  #varianta cu punct
+
 DOUBLE_EXT_PATTERNS = ATTACHMENT_CONFIG.get("double_extension_patterns", []) or [
     ".pdf.exe",
     ".doc.exe",
@@ -118,18 +127,12 @@ def is_cybeready_simulation(parsed: ParsedEmail) -> bool:
         return True
     
     yaml_domains = {str(d).lower().strip() for d in CYBEREADY_CONFIG.get("sender_domains", [])}
-    legacy_domains = {str(d).lower().strip() for d in CYBEREADY_LEGACY_DOMAINS}
-    
-    sensitive_domains = yaml_domains - legacy_domains
 
-    is_sensitive = domain in sensitive_domains or any(
-        is_subdomain_of(domain, sd) for sd in sensitive_domains
+    is_sensitive = domain in yaml_domains or any(
+        is_subdomain_of(domain, sd) for sd in yaml_domains
     )
 
-    if is_sensitive:
-        return False
-
-    return True
+    return not is_sensitive
 
 
 def analyze(parsed: ParsedEmail) -> Analysis:
@@ -221,5 +224,3 @@ def analyze(parsed: ParsedEmail) -> Analysis:
         )
     )
     return Analysis(verdict=Verdict.NEEDS_REVIEW, confidence=0.5, evidence=evidence_list)
-
-#yaml

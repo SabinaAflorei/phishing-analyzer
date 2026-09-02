@@ -83,8 +83,12 @@ def _format_evidence_for_prompt(analysis: Analysis) -> str:
 
     formatted_lines = []
     for ev in analysis.evidence:
-        detail_str = f" ({defang(ev.detail)})" if ev.detail else ""
-        desc_defanged = defang(ev.description)
+        # Sanitizare detaliu si descrierea inainte de a le defanga
+        clean_detail = sanitize_for_model(ev.detail) if ev.detail else ""
+        clean_desc = sanitize_for_model(ev.description)
+
+        detail_str = f" ({defang(clean_detail)})" if clean_detail else ""
+        desc_defanged = defang(clean_desc)
         formatted_lines.append(f"- [{ev.code}] {desc_defanged}{detail_str}")
 
     return "\n".join(formatted_lines)

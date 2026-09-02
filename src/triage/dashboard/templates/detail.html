@@ -1,126 +1,152 @@
 {% extends "base.html" %}
 
-{% block title %}Detaliu Raport {{ report.id }}{% endblock %}
+{% block title %}Detaliu Raport {{ report.id }} - {{ report.subject | decode_mime }}{% endblock %}
 
 {% block content %}
-<p><a href="/">&larr; Înapoi la Coadă</a> | <a href="/stats">Statistici</a></p>
+<p style="margin-bottom: 1rem;"><a href="/" style="text-decoration: none; color: #4a5568;">&larr; Înapoi la Coadă</a></p>
 
 {% if message %}
-<div style="padding: 10px; background-color: #d4edda; color: #155724; border-radius: 4px; margin-bottom: 15px;">
+<div style="padding: 12px; background-color: #d1e7dd; color: #0f5132; border-radius: 6px; margin-bottom: 15px; border: 1px solid #badbcc;">
     {{ message }}
 </div>
 {% endif %}
 
-<h2>Raport #{{ report.id }} - {{ report.subject }}</h2>
-
-<div style="display: flex; gap: 20px;">
-    <!-- Coloana stanga: Detalii si Dovezi -->
-    <div style="flex: 2;">
-        <h3>Verdict Determinist: <span class="badge {{ report.verdict }}">{{ report.verdict }}</span></h3>
-        <p><strong>Scor Incredere:</strong> {{ report.confidence_score }}</p>
-        <p><strong>Raportor:</strong> {{ report.reporter }}</p>
-
-        <div class="evidence-section">
-    <h3>Dovezi Identificate</h3>
-    {% if report.evidence and report.evidence|length > 0 %}
-        <ul>
-        {% for ev in report.evidence %}
-            <li>{{ ev }}</li>
-        {% endfor %}
-        </ul>
-    {% else %}
-        <p>Nicio dovada inregistrata.</p>
-    {% endif %}
+<!-- Header Raport -->
+<div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <span style="color: #718096; font-size: 0.9rem;">Raport #{{ report.id }}</span>
+        <h2 style="margin: 0.2rem 0 0 0;">{{ report.subject | decode_mime }}</h2>
+    </div>
+    <div>
+        <span class="badge {{ report.verdict }}" style="font-size: 1.1rem; padding: 0.5rem 1rem;">{{ report.verdict }}</span>
+    </div>
 </div>
 
-        <h4>Headere E-mail</h4>
-        {% if report.headers %}
-        <table border="1" style="width: 100%; border-collapse: collapse;">
-            <tr><th>Header</th><th>Valoare</th></tr>
-            <tr><td>From</td><td>{{ report.headers.get('from', report.get('from', '-')) }}</td></tr>
-            <tr><td>Reply-To</td><td>{{ report.headers.get('reply_to', report.get('reply_to', '-')) }}</td></tr>
-            <tr><td>Return-Path</td><td>{{ report.headers.get('return_path', report.get('return_path', '-')) }}</td></tr>
-        </table>
-        {% else %}
-        <table border="1" style="width: 100%; border-collapse: collapse;">
-            <tr><th>Header</th><th>Valoare</th></tr>
-            <tr><td>From</td><td>{{ report.get('from', '-') }}</td></tr>
-            <tr><td>Reply-To</td><td>{{ report.get('reply_to', '-') }}</td></tr>
-            <tr><td>Return-Path</td><td>{{ report.get('return_path', '-') }}</td></tr>
-        </table>
-        {% endif %}
+<div style="display: flex; gap: 20px; align-items: flex-start;">
+    <!-- Coloana Stânga: Detalii și Dovezi -->
+    <div style="flex: 2;">
+        
+        <!-- Panou Informații Principale -->
+        <div class="card">
+            <h3 style="border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">Metadate Raport</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.95rem;">
+                <p><strong>Scor Încredere:</strong> {{ report.confidence_score }}</p>
+                <p><strong>Raportor:</strong> {{ report.reporter }}</p>
+            </div>
 
-        <h4>Corp E-mail (Curatat / Defanged)</h4>
-        <pre style="background: #f4f4f4; padding: 10px; border-radius: 4px; white-space: pre-wrap;">{{ report.body_text }}</pre>
+            <h4 style="margin-top: 1rem;">Dovezi Identificate</h4>
+            {% if report.evidence and report.evidence|length > 0 %}
+                <ul style="background: #fff5f5; border-left: 4px solid var(--danger); padding: 0.8rem 1rem 0.8rem 2rem; margin: 0; border-radius: 0 4px 4px 0;">
+                {% for ev in report.evidence %}
+                    <li style="margin-bottom: 0.3rem;">{{ ev }}</li>
+                {% endfor %}
+                </ul>
+            {% else %}
+                <p style="color: #718096;">Nicio dovadă înregistrată.</p>
+            {% endif %}
+        </div>
 
-        <h3>Fișiere Atașate</h3>
-        {% if report.attachments and report.attachments|length > 0 %}
-          <ul>
-          {% for att in report.attachments %}
-            <li>
-            <strong>{{ att.filename }}</strong> 
-            (MIME: {{ att.mime_type }}, SHA256: <code>{{ att.sha256 }}</code>)
-            </li>
-          {% endfor %}
-          </ul>
-        {% else %}
-          <p>Fără atașamente.</p>
-        {% endif %}
+        <!-- Panou Headere -->
+        <div class="card">
+            <h3>Headere E-mail</h3>
+            {% if report.headers %}
+            <table>
+                <tr><th style="width: 25%;">Header</th><th>Valoare</th></tr>
+                <tr><td>From</td><td><code>{{ report.headers.get('from', report.get('from', '-')) }}</code></td></tr>
+                <tr><td>Reply-To</td><td><code>{{ report.headers.get('reply_to', report.get('reply_to', '-')) }}</code></td></tr>
+                <tr><td>Return-Path</td><td><code>{{ report.headers.get('return_path', report.get('return_path', '-')) }}</code></td></tr>
+            </table>
+            {% else %}
+            <table>
+                <tr><th style="width: 25%;">Header</th><th>Valoare</th></tr>
+                <tr><td>From</td><td><code>{{ report.get('from', '-') }}</code></td></tr>
+                <tr><td>Reply-To</td><td><code>{{ report.get('reply_to', '-') }}</code></td></tr>
+                <tr><td>Return-Path</td><td><code>{{ report.get('return_path', '-') }}</code></td></tr>
+            </table>
+            {% endif %}
+        </div>
+
+        <!-- Panou Corp E-mail -->
+        <div class="card">
+            <h3>Corp E-mail (Curățat / Defanged)</h3>
+            <pre style="background: #f8fafc; color: #2d3748; padding: 1rem; border: 1px solid var(--border-color); border-radius: 6px; white-space: pre-wrap; word-break: break-word; font-family: inherit;">{{ report.body_text or "Corp e-mail lipsă sau vid." }}</pre>
+        </div>
+
+        <!-- Panou Atasamente -->
+        <div class="card">
+            <h3>Fișiere Atașate</h3>
+            {% if report.attachments and report.attachments|length > 0 %}
+              <ul style="list-style-type: none; padding-left: 0;">
+              {% for att in report.attachments %}
+                <li style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 0.5rem; background: #fafafa;">
+                  📎 <strong>{{ att.filename }}</strong> 
+                  <span style="font-size: 0.85rem; color: #4a5568; display: block; margin-top: 0.2rem;">
+                    MIME: {{ att.mime_type }} | SHA256: <code>{{ att.sha256 }}</code>
+                  </span>
+                </li>
+              {% endfor %}
+              </ul>
+            {% else %}
+              <p style="color: #718096;">Fără atașamente.</p>
+            {% endif %}
+        </div>
     </div>
 
-    <!-- Coloana dreapta: Actiuni Analist & Feedback -->
-    <div style="flex: 1; background: #fafafa; padding: 15px; border-radius: 6px; border: 1px solid #ddd;">
-        <h3>Actiuni Analist</h3>
-        
-        <!-- Corectare Verdict -->
-        <form method="post" action="/report/{{ report.id }}/action" style="margin-bottom: 20px;">
-            <input type="hidden" name="action" value="override_verdict">
-            <label for="corrected_verdict"><strong>Schimba / Corecteaza Verdict:</strong></label><br>
-            <select name="corrected_verdict" id="corrected_verdict" style="width: 100%; padding: 6px; margin-top: 5px;">
-                {% for v in ['SIMULATION', 'MALICIOUS', 'SPAM', 'LEGITIMATE', 'NEEDS_REVIEW'] %}
-                <option value="{{ v }}" {% if report.verdict == v %}selected{% endif %}>{{ v }}</option>
-                {% endfor %}
-            </select>
-            <button type="submit" style="margin-top: 8px; width: 100%;">Salvează Corectia</button>
-        </form>
-
-        <hr>
-
-        <!-- Draft Raspuns & Copiere -->
-        <form method="post" action="/report/{{ report.id }}/action">
-            <input type="hidden" name="action" value="save_draft">
-            <label for="final_draft"><strong>Draft Raspuns Generat (RO):</strong></label>
-            <textarea id="final_draft" name="final_draft" rows="8" style="width: 100%; margin-top: 5px; padding: 6px;">{{ report.draft }}</textarea>
+    <!-- Coloana Dreaptă: Acțiuni Analist -->
+    <div style="flex: 1; position: sticky; top: 1rem;">
+        <div class="card" style="background: #ffffff; border-top: 4px solid var(--primary);">
+            <h3 style="border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">Acțiuni Analist</h3>
             
-            <div style="display: flex; gap: 10px; margin-top: 10px;">
-                <button type="button" onclick="copyDraft()" style="flex: 1; background-color: #007bff; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer;">
-                     Copiaza Text
-                </button>
-                <button type="submit" style="flex: 1; background-color: #28a745; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer;">
-                     Salveaza Draft
-                </button>
-            </div>
-            <span id="copy-status" style="display: block; font-size: 0.85em; color: green; margin-top: 5px;"></span>
-        </form>
+            <!-- Corectare Verdict -->
+            <form method="post" action="/report/{{ report.id }}/action" style="margin-bottom: 1.5rem;">
+                <input type="hidden" name="action" value="override_verdict">
+                <label for="corrected_verdict"><strong>Schimbă / Corectează Verdict:</strong></label>
+                <select name="corrected_verdict" id="corrected_verdict" style="width: 100%; padding: 8px; margin-top: 6px; border: 1px solid #cbd5e0;">
+                    {% for v in ['SIMULATION', 'MALICIOUS', 'SPAM', 'LEGITIMATE', 'NEEDS_REVIEW'] %}
+                    <option value="{{ v }}" {% if report.verdict == v %}selected{% endif %}>{{ v }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" style="margin-top: 10px; width: 100%; background: #4a5568; color: white; padding: 8px;">Salvează Corecția</button>
+            </form>
 
-        <hr>
+            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 1rem 0;">
 
-        <!-- Status Raspuns -->
-        <div>
-            <strong>Marcare Stare:</strong>
-            <div style="display: flex; gap: 10px; margin-top: 8px;">
-                <form method="post" action="/report/{{ report.id }}/action" style="flex: 1;">
-                    <input type="hidden" name="action" value="mark_sent">
-                    <button type="submit" style="width: 100%; background-color: #6c757d; color: white; border: none; padding: 6px; border-radius: 4px;">
-                         Trimis
+            <!-- Draft Răspuns & Copiere -->
+            <form method="post" action="/report/{{ report.id }}/action">
+                <input type="hidden" name="action" value="save_draft">
+                <label for="final_draft"><strong>Draft Răspuns Generat (RO):</strong></label>
+                <textarea id="final_draft" name="final_draft" rows="10" style="width: 100%; margin-top: 6px; padding: 8px; border: 1px solid #cbd5e0; box-sizing: border-box;">{{ report.draft }}</textarea>
+                
+                <div style="display: flex; gap: 8px; margin-top: 10px;">
+                    <button type="button" onclick="copyDraft()" style="flex: 1; background-color: var(--primary); color: white; padding: 9px;">
+                         Copiază Text
                     </button>
-                </form>
-                <form method="post" action="/report/{{ report.id }}/action" style="flex: 1;">
-                    <input type="hidden" name="action" value="escalate">
-                    <button type="submit" style="width: 100%; background-color: #dc3545; color: white; border: none; padding: 6px; border-radius: 4px;">
-                         Escaleaza
+                    <button type="submit" style="flex: 1; background-color: var(--success); color: white; padding: 9px;">
+                         Salvează Draft
                     </button>
-                </form>
+                </div>
+                <span id="copy-status" style="display: block; font-size: 0.85em; color: var(--success); margin-top: 5px; text-align: center;"></span>
+            </form>
+
+            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 1rem 0;">
+
+            <!-- Status Răspuns -->
+            <div>
+                <strong>Marcare Stare Raport:</strong>
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <form method="post" action="/report/{{ report.id }}/action" style="flex: 1;">
+                        <input type="hidden" name="action" value="mark_sent">
+                        <button type="submit" style="width: 100%; background-color: #718096; color: white; padding: 8px;">
+                            ✓ Trimis
+                        </button>
+                    </form>
+                    <form method="post" action="/report/{{ report.id }}/action" style="flex: 1;">
+                        <input type="hidden" name="action" value="escalate">
+                        <button type="submit" style="width: 100%; background-color: var(--danger); color: white; padding: 8px;">
+                             Escalează
+                        </button>
+                    </form>
+                </div>
             </div>
         </div>
     </div>

@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi import Form
-from typing import List
+from typing import Annotated, Any
 
 from triage.analyzer import analyze
 from triage.defang import defang
@@ -17,6 +16,7 @@ from triage.drafter import build_draft
 from triage.fetcher import fetch_from_corpus
 from triage.parser import parse_report
 from triage.dashboard.storage import get_feedback_stats, save_draft_edit, save_verdict_override
+from triage.parser import decode_mime_header
 
 logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent
@@ -29,6 +29,7 @@ app = FastAPI(title="Phishing triage", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.filters["decode_mime"] = decode_mime_header
 
 def load_real_reports() -> list[dict[str, Any]]:
     """Încarcă și procesează automat toate e-mailurile din corpus/eml."""
@@ -77,6 +78,7 @@ def load_real_reports() -> list[dict[str, Any]]:
                 "confidence": analysis_result.confidence,
                 "evidence": evidence_list,
                 "defanged_urls": defanged_urls,
+                "body_text": defang(parsed_mail.body_text),
                 "draft": draft_text,
                 "attachments": [
                      {
@@ -128,8 +130,7 @@ async def stats_page(request: Request) -> HTMLResponse:
         request,
         "stats.html",
         {"stats": stats},
-    )
-
+    ) 
 
 @app.post("/report/{report_id}/action")
 async def handle_report_action(
@@ -157,8 +158,8 @@ async def handle_report_action(
 @app.post("/bulk-action")
 async def handle_bulk_action(
     request: Request,
-    selected_ids: List[str] = Form([]),
-    bulk_status: str = Form(...)
+    selected_ids: Annotated[list[str], Form(default_factory=list)],
+    bulk_status: Annotated[str, Form(...)],
 ) -> HTMLResponse:
     reports = load_real_reports()
     

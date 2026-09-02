@@ -3,54 +3,56 @@
 {% block title %}Coada de Rapoarte Phishing{% endblock %}
 
 {% block content %}
-<h2>Coada de Rapoarte</h2>
+<div class="card">
+    <h2 style="margin-bottom: 1rem;">Coadă de Lucru</h2>
 
-<form id="bulk-form" method="post" action="/bulk-action">
-    <div style="margin-bottom: 15px; background: #e9ecef; padding: 10px; border-radius: 4px; display: flex; gap: 10px; align-items: center;">
-        <strong>Actiuni pentru elementele selectate:</strong>
-        <select name="bulk_status" style="padding: 5px;">
-            <option value="NEW">Marcheaza ca NOU (NEW)</option>
-            <option value="SENT">Marcheaza ca TRIMIS (SENT)</option>
-            <option value="ESCALATED">Marcheaza ca ESCALAT (ESCALATED)</option>
-        </select>
-        <button type="submit" style="background-color: #007bff; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">
-            Aplica
-        </button>
-    </div>
+    <form id="bulk-form" method="post" action="/bulk-action">
+        <div style="margin-bottom: 1rem; background: #f1f5f9; padding: 0.75rem 1rem; border-radius: 6px; display: flex; gap: 12px; align-items: center;">
+            <strong style="font-size: 0.9rem;">Acțiuni Bulk:</strong>
+            <select name="bulk_status" style="padding: 6px 10px; border: 1px solid #cbd5e0;">
+                <option value="NEW">Marchează ca NOU (NEW)</option>
+                <option value="SENT">Marchează ca TRIMIS (SENT)</option>
+                <option value="ESCALATED">Marchează ca ESCALAT (ESCALATED)</option>
+            </select>
+            <button type="submit" style="background-color: var(--primary); color: white; padding: 6px 16px;">
+                Aplică
+            </button>
+        </div>
 
-    <table border="1" style="width: 100%; border-collapse: collapse;">
-        <thead>
-            <tr>
-                <th><input type="checkbox" id="select-all" onclick="toggleAll(this)"></th>
-                <th>ID</th>
-                <th>Subiect</th>
-                <th>Raportor</th>
-                <th>Verdict</th>
-                <th>Încredere</th>
-                <th>Status</th>
-                <th>Actiune</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for report in reports %}
-            <tr>
-                <td><input type="checkbox" name="selected_ids" value="{{ report.id }}" class="report-checkbox"></td>
-                <td>{{ report.id }}</td>
-                <td><a href="/report/{{ report.id }}">{{ report.subject }}</a></td>
-                <td>{{ report.reporter }}</td>
-                <td><span class="badge {{ report.verdict }}">{{ report.verdict }}</span></td>
-                <td>{{ report.confidence }}</td>
-                <td>{{ report.status }}</td>
-                <td><a href="/report/{{ report.id }}">Detaliu</a></td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="8">Nu exista rapoarte in coada.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</form>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 30px;"><input type="checkbox" id="select-all" onclick="toggleAll(this)"></th>
+                    <th>ID</th>
+                    <th>Subiect</th>
+                    <th>Raportor</th>
+                    <th>Verdict</th>
+                    <th>Încredere</th>
+                    <th>Status</th>
+                    <th>Acțiune</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for report in reports %}
+                <tr>
+                    <td><input type="checkbox" name="selected_ids" value="{{ report.id }}" class="report-checkbox"></td>
+                    <td><code>{{ report.id }}</code></td>
+                    <td><a href="/report/{{ report.id }}" style="text-decoration: none; font-weight: 600; color: #2d3748;">{{ report.subject | decode_mime }}</a></td>
+                    <td>{{ report.reporter }}</td>
+                    <td><span class="badge {{ report.verdict }}">{{ report.verdict }}</span></td>
+                    <td>{{ report.confidence }}</td>
+                    <td><span style="font-size: 0.85rem; font-weight: 600; color: #4a5568;">{{ report.status }}</span></td>
+                    <td><a href="/report/{{ report.id }}" style="text-decoration: none; background: #edf2f7; color: #2d3748; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem;">Deschide</a></td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" style="text-align: center; color: #718096; padding: 2rem;">Nu există rapoarte în coadă.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </form>
+</div>
 
 <script>
 function toggleAll(source) {
