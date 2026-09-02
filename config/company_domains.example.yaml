@@ -28,6 +28,7 @@ trusted_partners:
   - microsoft.com
   - atlassian.net
   - furnizor-newsletter.ro      # furnizor cu abonament existent (cazul 06)
+  - ctce.ro
 
 # Adresa la care angajatii raporteaza. Mesajele CATRE ea sunt raportari;
 # nu se analizeaza wrapper-ul, ci mesajul original din interior.

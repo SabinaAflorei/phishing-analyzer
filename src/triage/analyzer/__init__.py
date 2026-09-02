@@ -134,6 +134,8 @@ def is_cybeready_simulation(parsed: ParsedEmail) -> bool:
 
     return not is_sensitive
 
+COMPANY_CONFIG = load_yaml_config("company_domains.yaml")
+TRUSTED_PARTNERS = {d.lower().strip() for d in COMPANY_CONFIG.get("trusted_partners", [])}
 
 def analyze(parsed: ParsedEmail) -> Analysis:
     evidence_list: list[Evidence] = []
@@ -191,8 +193,73 @@ def analyze(parsed: ParsedEmail) -> Analysis:
             )
         )
         return Analysis(verdict=Verdict.NEEDS_REVIEW, confidence=0.5, evidence=evidence_list)
+    
+    body_content = getattr(parsed, "body", "") or ""
+    raw_content = getattr(parsed, "raw_text", b"").decode("utf-8", errors="replace")
+    subject_text = getattr(parsed, "subject", "") or ""
+    from_addr = extract_email_address(parsed.from_address)
+    sender_domain = from_addr.split("@")[-1].lower() if "@" in from_addr else ""
 
-    # 5. Verificare stricta LEGITIMATE (SPF + DKIM + DMARC pass)
+    # 5. Verificare Prompt Injection (caractere ascunse, zero-width sau override de directie)
+    if any(char in body_content or char in raw_content for char in ["\u200b", "\u200c", "\u200d", "\u202e"]) or "display:none" in body_content.lower():
+         evidence_list.append(
+             Evidence(
+                 code="PROMPT_INJECTION",
+                 severity=Severity.HIGH,
+                 description="Tentativă de prompt injection detectată prin caractere ascunse sau stiluri de afișare.",
+                 detail=defang("Detectat conținut ascuns sau override de direcție în corpul e-mailului.")
+             )
+         )
+         return Analysis(verdict=Verdict.MALICIOUS, confidence=0.9, evidence=evidence_list)
+
+    # 6. Verificare Newsletter / Partener de încredere (Doar pentru parteneri reali)
+    is_trusted_sender = sender_domain in TRUSTED_PARTNERS or any(
+        is_subdomain_of(sender_domain, tp) for tp in TRUSTED_PARTNERS
+    )
+    is_trusted_in_raw = any(tp in raw_content.lower() for tp in TRUSTED_PARTNERS)
+    is_trusted_partner = is_trusted_sender or is_trusted_in_raw
+
+    has_no_explicit_fail = "spf=fail" not in auth_lower and "dkim=fail" not in auth_lower and "dmarc=fail" not in auth_lower
+    
+    # Doar cuvinte specifice de newsletter pentru parteneri de încredere (fără "dezabonare simplă" care aparține spamului)
+    has_partner_newsletter_markers = "newsletter" in subject_text.lower() or "informare" in subject_text.lower()
+
+    if is_trusted_partner and has_no_explicit_fail and has_partner_newsletter_markers:
+        evidence_list.append(
+            Evidence(
+                code="LEGIT_NEWSLETTER",
+                severity=Severity.LOW,
+                description="Newsletter legitim de la un partener de încredere (furnizor cunoscut).",
+                detail=defang(f"Expeditor: {from_addr}, Subiect: {subject_text}"),
+            )
+        )
+        return Analysis(verdict=Verdict.LEGITIMATE, confidence=0.85, evidence=evidence_list)
+
+   # 7. Verificare SPAM (inclusiv publicitate / evenimente B2B nesolicitate)
+    is_spam_report = parsed.report_kind == ReportKind.SPAM
+    has_marketing_keywords = (
+        "publicitate" in body_content.lower() 
+        or "eveniment" in body_content.lower()
+        or "conferință" in body_content.lower()
+        or "conferinta" in body_content.lower()
+        or "invitație" in body_content.lower()
+        or "invitatie" in body_content.lower()
+        or "simpozion" in body_content.lower()
+    )
+    has_unsubscribe = "dezabonare" in body_content.lower() or "unsubscribe" in body_content.lower()
+
+    if is_spam_report or has_marketing_keywords or (has_unsubscribe and not is_trusted_partner):
+        evidence_list.append(
+            Evidence(
+                code="REPORTED_AS_SPAM",
+                severity=Severity.LOW,
+                description="Mesajul este raportat ca fiind spam sau conține oferte promoționale/evenimente nesolicitate.",
+                detail=defang("Detectate elemente de marketing/spam fără risc direct de malware.")
+            )
+        )
+        return Analysis(verdict=Verdict.SPAM, confidence=0.85, evidence=evidence_list)
+
+    # 8. Verificare stricta LEGITIMATE (SPF + DKIM + DMARC pass)
     if "spf=pass" in auth_lower and "dkim=pass" in auth_lower and "dmarc=pass" in auth_lower:
         evidence_list.append(
             Evidence(
@@ -203,19 +270,7 @@ def analyze(parsed: ParsedEmail) -> Analysis:
         )
         return Analysis(verdict=Verdict.LEGITIMATE, confidence=0.85, evidence=evidence_list)
 
-
-    if parsed.report_kind == ReportKind.SPAM:
-        evidence_list.append(
-            Evidence(
-                code="REPORTED_AS_SPAM",
-                severity=Severity.LOW,
-                description="Mesajul este raportat ca fiind spam.",
-            )
-        )
-        return Analysis(verdict=Verdict.SPAM, confidence=0.85, evidence=evidence_list)
-        
-
-    # 6. Fallback Implicit -> NEEDS_REVIEW
+    # 9. Fallback Implicit -> NEEDS_REVIEW
     evidence_list.append(
         Evidence(
             code="INSUFFICIENT_EVIDENCE",
