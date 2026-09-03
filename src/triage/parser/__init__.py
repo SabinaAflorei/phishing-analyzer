@@ -13,6 +13,7 @@ import urllib.parse
 import zipfile
 from contextlib import suppress
 from dataclasses import dataclass, field
+from datetime import datetime
 from email import message_from_bytes
 from email.header import decode_header, make_header
 from email.message import Message
@@ -61,12 +62,17 @@ class ParsedEmail:
     # doar cand mesajul nu e o raportare impachetata.
     reporter_address: str = ""
     reporter_display_name: str = ""
+    # Destinatarii mesajului-invelis. Un mesaj catre adresa de raportare e o
+    # raportare, nu un mail suspect trimis de coleg.
+    to_addresses: list[str] = field(default_factory=list)
     reply_to: str = ""
     return_path: str = ""
     message_id: str = ""
     in_reply_to: str = ""
     references: str = ""
     auth_results: str = ""
+    # Data din headerul Date al mesajului-invelis, adica momentul raportarii.
+    sent_at: datetime | None = None
     received_chain: list[str] = field(default_factory=list)
     # Numele headerelor prezente, cu litere mici. Fingerprint-ul CyberReady se
     # uita dupa headere proprietare (X-CRPS, X-Virtual-MTA), iar newsletterele
@@ -309,6 +315,18 @@ def parse_report(raw: bytes) -> ParsedEmail:
         decode_mime_header(outer.get("From", ""))
     )
 
+    sent_at: datetime | None = None
+    with suppress(Exception):
+        sent_at = email.utils.parsedate_to_datetime(str(outer.get("Date", "")))
+
+    to_addresses = [
+        addr.lower()
+        for _, addr in email.utils.getaddresses(
+            [decode_mime_header(v) for v in outer.get_all("To", []) + outer.get_all("Cc", [])]
+        )
+        if addr
+    ]
+
     body_text_parts: list[str] = []
     html_parts: list[str] = []
     urls: set[str] = set()
@@ -394,12 +412,14 @@ def parse_report(raw: bytes) -> ParsedEmail:
         from_display_name=display_name.strip(),
         reporter_address=reporter_address,
         reporter_display_name=reporter_display.strip(),
+        to_addresses=to_addresses,
         reply_to=decode_mime_header(msg.get("Reply-To", "")),
         return_path=decode_mime_header(msg.get("Return-Path", "")),
         auth_results=msg.get("Authentication-Results", ""),
         message_id=msg.get("Message-ID", ""),
         in_reply_to=msg.get("In-Reply-To", ""),
         references=msg.get("References", ""),
+        sent_at=sent_at,
         received_chain=msg.get_all("Received", []),
         header_names=[str(name).lower() for name in msg],
         body_text=full_body,

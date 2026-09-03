@@ -21,7 +21,11 @@ from typing import Any, cast
 import pytest
 import yaml
 
-from triage.verdicts import Verdict
+from triage.analyzer import SIGNAL_WEIGHT, analyze
+from triage.drafter import generate_draft
+from triage.parser import parse_report
+from triage.pipeline import ingest_corpus
+from triage.verdicts import Analysis, Verdict
 
 CORPUS = Path(__file__).parent.parent / "corpus"
 EML_DIR = CORPUS / "eml"
@@ -76,21 +80,96 @@ def test_eml_se_parseaza(case: str) -> None:
     list(msg.walk())  # structura MIME e traversabila cap-coada
 
 
-# TODO(lipseste testul cel mai important): niciun test nu compara verdictul REAL
-# cu expected_verdict din yaml.
-# Ce e gresit: fisierul asta verifica doar ca datele sunt intregi si ca yaml-urile
-# sunt valide - ceea ce e util, dar nu cheama niciodata analyze(). Ai 12 cazuri cu
-# verdict asteptat scris in corpus/expected/ si nefolosit de nimeni.
-# De ce conteaza: practic TOATE bug-urile marcate cu TODO in analyzer si parser ar
-# fi fost prinse de testul asta, in loc sa fie descoperite la review.
-# Cum rezolvi: un test parametrizat pe cazuri - citesti .eml, parse_report(),
-# analyze(), si compari result.verdict cu data["expected_verdict"]. Pune pe el
-# acelasi decorator @_no_corpus care exista deja mai jos, ca sa se sara pe masinile
-# fara corpus in loc sa pice. Verifica si must_contain_evidence cand incepi sa
-# completezi listele alea.
 @_no_corpus
 @pytest.mark.parametrize("case", _cases())
 def test_eml_e_privat(case: str) -> None:
     """Continut sensibil: 600, ca in sectiunea 4.5."""
     mode = (EML_DIR / f"{case}.eml").stat().st_mode & 0o777
     assert mode == 0o600, f"{case}.eml are permisiuni {mode:o}, se astepta 600"
+
+
+# ---------------------------------------------------------------------------
+# Testul care conteaza: verdictul REAL fata de cel asteptat (criteriul 8.1)
+# ---------------------------------------------------------------------------
+
+
+def _expected(case: str) -> dict[str, Any]:
+    return cast(
+        dict[str, Any],
+        yaml.safe_load((EXPECTED_DIR / f"{case}.yaml").read_text(encoding="utf-8")),
+    )
+
+
+def _analyze(case: str) -> Analysis:
+    return analyze(parse_report((EML_DIR / f"{case}.eml").read_bytes()))
+
+
+@_no_corpus
+@pytest.mark.parametrize("case", _cases())
+def test_verdictul_e_cel_asteptat(case: str) -> None:
+    """Criteriul 8.1: fiecare caz din corpus primeste verdictul corect.
+
+    Practic toate bug-urile marcate cu TODO in analizor si parser ar fi fost
+    prinse aici, in loc sa fie descoperite la review.
+    """
+    expected = _expected(case)
+    result = _analyze(case)
+    assert result.verdict == expected["expected_verdict"], (
+        f"{case}: asteptat {expected['expected_verdict']}, obtinut {result.verdict} "
+        f"[{', '.join(ev.code for ev in result.evidence)}]"
+    )
+
+
+@_no_corpus
+@pytest.mark.parametrize("case", _cases())
+def test_dovezile_obligatorii_sunt_prezente(case: str) -> None:
+    """Verdictul singur nu ajunge. Doua cazuri pot iesi MALICIOUS din motive
+    complet diferite; cand unul se strica vrei sa afli CARE semnal a disparut."""
+    required = set(_expected(case)["must_contain_evidence"])
+    produced = {ev.code for ev in _analyze(case).evidence}
+    assert required <= produced, f"{case}: lipsesc dovezile {sorted(required - produced)}"
+
+
+@_no_corpus
+@pytest.mark.parametrize("case", _cases())
+def test_dovezile_folosesc_vocabularul_definit(case: str) -> None:
+    """Un cod fara pondere ar conta zero in tacere, adica ar fi cod mort."""
+    produced = {ev.code for ev in _analyze(case).evidence}
+    assert produced <= set(SIGNAL_WEIGHT), f"{case}: coduri necunoscute {produced - set(SIGNAL_WEIGHT)}"
+
+
+@_no_corpus
+@pytest.mark.parametrize("case", _cases())
+def test_niciun_url_clicabil_in_output(case: str) -> None:
+    """Criteriul 8.2, pe iesirea analizorului: dovezile ajung in baza de date,
+    in dashboard si in log-uri, deci trebuie sa fie deja defangate."""
+    for ev in _analyze(case).evidence:
+        assert "http://" not in ev.detail, f"{case}: URL clicabil in {ev.code}"
+        assert "https://" not in ev.detail, f"{case}: URL clicabil in {ev.code}"
+
+
+@_no_corpus
+@pytest.mark.parametrize("case", _cases())
+def test_pipeline_ul_produce_draft_pentru_verdictele_actionabile(case: str) -> None:
+    """NEEDS_REVIEW nu primeste draft automat - nici sistemul nu stie ce e mailul.
+    Restul verdictelor primesc, mereu, cel putin template-ul static."""
+    parsed = parse_report((EML_DIR / f"{case}.eml").read_bytes())
+    analysis = analyze(parsed)
+    draft = generate_draft(analysis, parsed.reporter_display_name or "Coleg")
+
+    if analysis.verdict == Verdict.NEEDS_REVIEW:
+        assert draft.text == ""
+    else:
+        assert "Cu stimă," in draft.text, f"{case}: draft fara incheiere"
+
+
+@_no_corpus
+def test_ingestia_intregului_corpus_e_idempotenta() -> None:
+    """Criteriul I9, pe date reale: a doua rulare nu adauga nimic."""
+    first = ingest_corpus(EML_DIR)
+    assert first.ingested == len(_cases())
+    assert first.failed == 0, first.errors
+
+    second = ingest_corpus(EML_DIR)
+    assert (second.ingested, second.failed) == (0, 0)
+    assert second.skipped == len(_cases())

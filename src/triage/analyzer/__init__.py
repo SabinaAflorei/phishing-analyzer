@@ -67,6 +67,7 @@ COMPANY_OWNED = _lower_set(COMPANY_CONFIG.get("owned_domains"))
 MAIL_INFRA = _lower_set(COMPANY_CONFIG.get("mail_infrastructure"))
 TRUSTED_PARTNERS = _lower_set(COMPANY_CONFIG.get("trusted_partners"))
 HIGH_RISK_TLDS = _lower_set(COMPANY_CONFIG.get("high_risk_tlds"))
+REPORT_MAILBOX = str(COMPANY_CONFIG.get("report_mailbox", "")).strip().lower()
 
 # Extensiile periculoase: executabile + macro + arhive. Arhivele lipseau, deci
 # .iso si .img nu erau semnalate deloc - livrarea de malware prin ISO trece fix
@@ -111,6 +112,7 @@ SIGNAL_WEIGHT: dict[str, float] = {
     # pur informative: NU au voie sa mute verdictul
     "HIDDEN_TEXT": 0.0,
     "SCREENSHOT_ONLY": 0.0,
+    "REPORT_WITHOUT_ORIGINAL": 0.0,
     "MARKETING_CONTENT": 0.0,
     "LEGIT_NEWSLETTER": 0.0,
     "PASS_ALL_CHECKS": 0.0,
@@ -634,30 +636,91 @@ def _classification_evidence(parsed: ParsedEmail) -> list[Evidence]:
             )
         )
 
+    return found
+
+
+def _report_form_evidence(parsed: ParsedEmail) -> list[Evidence]:
+    """Forma raportarii, cand ea insasi e motivul escaladarii."""
     if parsed.report_kind == ReportKind.SCREENSHOT_ONLY:
-        found.append(
+        return [
             Evidence(
                 code="SCREENSHOT_ONLY",
                 severity=Severity.MEDIUM,
                 description="Raportul conține doar o captură de ecran și necesită revizuire manuală.",
             )
-        )
-    return found
+        ]
+    return []
+
+
+def _original_message_available(parsed: ParsedEmail) -> bool:
+    """A reusit parser-ul sa scoata mesajul ORIGINAL din raportare?"""
+    return parsed.report_kind == ReportKind.ATTACHED_EML or parsed.headers_from_body
+
+
+def is_report_wrapper(parsed: ParsedEmail) -> bool:
+    """Analizam invelisul raportarii in loc de mailul suspect?
+
+    Cand un coleg trimite o captura de ecran sau descrie in cuvinte ce a primit,
+    singurele headere din mesaj sunt ALE LUI. A rula pe ele regulile de
+    autenticitate a expeditorului inseamna a-l acuza pe raportor: From-ul lui e
+    pe un domeniu propriu, iar Received-ul nu trece prin infrastructura interna,
+    deci iese INTERNAL_DOMAIN_SPOOF pe cel mai cuminte om din companie.
+
+    `report_mailbox` din config exista exact pentru asta si nu il citea nimeni:
+    "Mesajele CATRE ea sunt raportari; nu se analizeaza wrapper-ul, ci mesajul
+    original din interior." Daca originalul nu s-a putut extrage, nu exista ce
+    analiza - si atunci raspunsul corect e escaladarea, nu un verdict inventat
+    din datele raportorului.
+    """
+    if _original_message_available(parsed):
+        return False
+    if parsed.report_kind == ReportKind.SCREENSHOT_ONLY:
+        return True
+    return bool(REPORT_MAILBOX) and REPORT_MAILBOX in set(parsed.to_addresses)
+
+
+# Regulile care judeca EXPEDITORUL. Pe un invelis de raportare, expeditorul e
+# colegul care raporteaza, deci nu au ce cauta acolo.
+SENDER_RULES = (
+    _auth_evidence,
+    _domain_evidence,
+    _header_consistency_evidence,
+    _display_name_evidence,
+)
+
+# Regulile care judeca CONTINUTUL. Pe un invelis, continutul e textul scris de
+# coleg - "descrierea NU e o sursa de verdict" (nota cazului 11).
+CONTENT_RULES = (
+    _content_evidence,
+    _hidden_text_evidence,
+    _classification_evidence,
+)
+
+# Atasamentele raman: un coleg poate redirectiona chiar fisierul periculos.
+ALWAYS_RULES = (_attachment_evidence, _report_form_evidence)
 
 
 def _collect_evidence(parsed: ParsedEmail) -> list[Evidence]:
     """Toate regulile, fara iesire devreme. Asa se coroboreaza semnalele."""
     evidence: list[Evidence] = []
-    for rule in (
-        _auth_evidence,
-        _attachment_evidence,
-        _domain_evidence,
-        _header_consistency_evidence,
-        _display_name_evidence,
-        _content_evidence,
-        _hidden_text_evidence,
-        _classification_evidence,
-    ):
+
+    if is_report_wrapper(parsed):
+        for rule in ALWAYS_RULES:
+            evidence.extend(rule(parsed))
+        evidence.append(
+            Evidence(
+                code="REPORT_WITHOUT_ORIGINAL",
+                severity=Severity.MEDIUM,
+                description=(
+                    "Raportare din care mesajul original nu a putut fi extras. "
+                    "Nu există dovezi tehnice de analizat, deci decide un analist."
+                ),
+                detail="Headerele disponibile aparțin colegului care a raportat, nu expeditorului.",
+            )
+        )
+        return evidence
+
+    for rule in ALWAYS_RULES + SENDER_RULES + CONTENT_RULES:
         evidence.extend(rule(parsed))
     return evidence
 
