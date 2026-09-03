@@ -43,6 +43,15 @@ def test_extract_forwarded_headers_no_match_returns_empty():
     assert extract_forwarded_headers("Just a normal reply, no forward block.") == {}
 
 
+# TODO(curatenie): cele trei teste de mai sus sunt bune, dar blocul de mai jos nu
+# e un test - e cod la nivel de modul care ruleaza la COLECTARE, printeaza si nu
+# verifica nimic. Pytest il "trece" mereu, deci umfla acoperirea fara sa dea niciun
+# semnal. In plus depinde de corpus/eml/, care e in .gitignore, deci pe orice alta
+# masina doar printeaza "nu a fost gasit".
+# Cum rezolvi: sterge blocul, sau transforma-l intr-un test adevarat, cu un .eml
+# mic construit inline in test (bytes literali), ca sa ruleze si fara corpus.
+# Sterge si sys.path.insert de la inceputul fisierului - pachetul se instaleaza cu
+# "pip install -e .", nu are nevoie de carje.
 if eml_path.exists():
     raw_data = eml_path.read_bytes()
     parsed = parse_report(raw_data)

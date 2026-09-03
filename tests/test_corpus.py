@@ -76,6 +76,18 @@ def test_eml_se_parseaza(case: str) -> None:
     list(msg.walk())  # structura MIME e traversabila cap-coada
 
 
+# TODO(lipseste testul cel mai important): niciun test nu compara verdictul REAL
+# cu expected_verdict din yaml.
+# Ce e gresit: fisierul asta verifica doar ca datele sunt intregi si ca yaml-urile
+# sunt valide - ceea ce e util, dar nu cheama niciodata analyze(). Ai 12 cazuri cu
+# verdict asteptat scris in corpus/expected/ si nefolosit de nimeni.
+# De ce conteaza: practic TOATE bug-urile marcate cu TODO in analyzer si parser ar
+# fi fost prinse de testul asta, in loc sa fie descoperite la review.
+# Cum rezolvi: un test parametrizat pe cazuri - citesti .eml, parse_report(),
+# analyze(), si compari result.verdict cu data["expected_verdict"]. Pune pe el
+# acelasi decorator @_no_corpus care exista deja mai jos, ca sa se sara pe masinile
+# fara corpus in loc sa pice. Verifica si must_contain_evidence cand incepi sa
+# completezi listele alea.
 @_no_corpus
 @pytest.mark.parametrize("case", _cases())
 def test_eml_e_privat(case: str) -> None:

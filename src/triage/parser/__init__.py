@@ -49,6 +49,24 @@ class ParsedEmail:
 
 def _clean_body_text(raw_text: str) -> str:
     """Elimină headerele reziduale scapate în corp din cauza e-mailurilor malformate."""
+    # TODO(bug 1 din 2): functia sterge un URL aflat pe prima linie a corpului.
+    # Ce e gresit: bucla de mai jos sterge orice linie de la inceput care contine
+    # ":", iar un URL contine ":" in "https://". Testat:
+    #   in : 'https://evil.example/login\nVa rugam confirmati contul.'
+    #   out: 'Va rugam confirmati contul.'
+    # Extragerea de URL-uri se face pe textul deja curatat, deci link-ul dispare
+    # complet din parsed.urls. Intr-un analizor de phishing, sa pierzi link-ul e
+    # chiar lucrul pe care nu ti-l permiti. La fel se pierde si un rand de tipul
+    # "Atentie: contul dvs...".
+    #
+    # TODO(bug 2 din 2): functia mananca blocul de headere de care are nevoie
+    # extract_forwarded_headers. Un forward din Outlook incepe fix cu "From:",
+    # "Sent:", "To:", "Subject:", deci curatarea sterge exact ce cauta regex-ul
+    # dupa aceea. Vezi TODO-ul de la extract_forwarded_headers.
+    #
+    # Cum rezolvi ambele: nu sterge orice linie cu ":". Foloseste un regex care
+    # recunoaste un header adevarat, ceva de genul ^[A-Za-z][A-Za-z0-9-]*:\s
+    # Un URL nu se potriveste, pentru ca dupa "https" vine "://", nu ": ".
     lines = raw_text.splitlines()
     cleaned_lines = []
     in_headers = True
@@ -138,6 +156,17 @@ def decode_mime_header(header_value: str | None) -> str:
     text = re.sub(r"=\?[uU][tT][fF]-8\?[bB]\?([^?]*)\?=", decode_b64, text)
     text = re.sub(r"=\?[uU][tT][fF]-8\?[qQ]\?([^?]*)\?=", decode_qp, text)
 
+    # TODO(bug): cele doua transformari de mai jos strica subiecte perfect normale.
+    # Ce e gresit: decode_header() din biblioteca standard, apelat mai sus, a facut
+    # deja treaba corect. Aici se mai trece inca o data peste rezultat cu "_" -> spatiu
+    # si "=XX" -> procent-decodare. Alea au sens DOAR in interiorul unui encoded-word
+    # de tip =?utf-8?q?...?=, nu pe text deja decodat. Testat:
+    #   'Raport_final_2026'          -> 'Raport final 2026'
+    #   'Reducere 100%20 la produse' -> 'Reducere 100 la produse'
+    # Cum rezolvi: muta cele doua transformari in interiorul functiei decode_qp,
+    # care trateaza deja ramura =?utf-8?q?. Pe textul deja decodat nu mai aplica nimic.
+    # Pont general: daca biblioteca standard a facut deja treaba, nu mai treci inca
+    # o data peste rezultat cu regex - de obicei strici, nu repari.
     text = text.replace("_", " ")
     text = re.sub(r"=([0-9A-Fa-f]{2})", r"%\1", text)
     
@@ -157,6 +186,21 @@ _FWD_HEADER_BLOCK_RE = re.compile(
 def extract_forwarded_headers(body_text: str) -> dict[str, str]:
     """Extrage blocul de headere inline dintr-un forward. Best-effort:
     e text scris de client de mail, nu structurat ca un Message."""
+    # TODO(bug): functia asta si _clean_body_text se bat cap in cap, si din cauza
+    # asta extragerea merge doar din intamplare.
+    # Ce e gresit: in parse_report, functia e chemata pe full_body, adica pe textul
+    # DEJA trecut prin _clean_body_text. Iar _clean_body_text sterge liniile de la
+    # inceput care contin ":" - exact "From:", "Sent:", "To:", "Subject:". Deci pe
+    # un forward din Outlook, care incepe direct cu blocul de headere, nu mai ramane
+    # nimic de extras. Testat:
+    #   extract pe corpul BRUT     -> {'from': 'Atacator <fake@rau.com>', ...}
+    #   dupa _clean_body_text      -> 'Corp original aici.'
+    #   extract pe corpul CURATAT  -> {}
+    # Pe tot pipeline-ul, from_address ramane al colegului care a raportat, nu al
+    # atacatorului. Regex-ul functioneaza doar cand exista text inaintea blocului.
+    # Cum rezolvi: cheama extract_forwarded_headers pe textul decodat INAINTE de
+    # _clean_body_text. Tine textul brut intr-o variabila separata, extrage
+    # headerele din el, si abia apoi curata pentru body_text.
     match = _FWD_HEADER_BLOCK_RE.search(body_text)
     if not match:
         return {}
@@ -227,6 +271,10 @@ def parse_report(raw: bytes) -> ParsedEmail:
     attachments = []
     url_pattern = re.compile(r"https?://[^\s<>\"']+")
 
+    # TODO(curatenie): corpul buclei e indentat cu 12 spatii in loc de 8. Merge,
+    # pentru ca e uniform, dar e derutant la citit. Ruleaza "make fmt".
+    # Cat esti acolo: analyzer/__init__.py si parser/__init__.py inca nu au linie
+    # noua la final de fisier.
     for part in msg.walk():
             if part.is_multipart():
                 continue
@@ -262,6 +310,18 @@ def parse_report(raw: bytes) -> ParsedEmail:
                 html_content = _decode_part_payload(part)
                 soup = BeautifulSoup(html_content, "html.parser")
     
+                # TODO(bug): conditia asta face ca textul din HTML sa fie ignorat
+                # aproape mereu. Se extrage doar daca nu exista DELOC o parte
+                # text/plain. La un multipart/alternative normal, adica majoritatea
+                # mailurilor, partea HTML e sarita complet.
+                # Consecinte: (1) regula de prompt injection din analyzer nu vede
+                # niciodata textul ascuns din HTML - testat pe un mail de forma
+                # cazului 08, textul de injectie nu a ajuns in body_text;
+                # (2) cuvintele cheie de marketing de la regula 7 (SPAM) lipsesc si
+                # ele, pentru ca in mailurile comerciale textul bun e in HTML.
+                # Cum rezolvi: aduna textul din HTML mereu, nu doar ca rezerva.
+                # Daca te temi de duplicare cu text/plain, pastreaza-le separat
+                # (de exemplu un camp body_html_text) sau deduplica la final.
                 if not body_text_parts:
                     for element in soup(["script", "style"]):
                         element.decompose()
@@ -280,6 +340,18 @@ def parse_report(raw: bytes) -> ParsedEmail:
 
     full_body = "\n\n".join(body_text_parts).strip()
 
+    # TODO(bug): vezi TODO-ul de la extract_forwarded_headers - se cheama pe
+    # full_body, adica pe textul deja curatat, care de multe ori nu mai contine
+    # blocul de headere.
+    #
+    # TODO(efect secundar, atentie): dupa ce suprascrii from_address cu expeditorul
+    # din forward, received_chain ramane al mesajului invelis (al colegului care a
+    # raportat). Adica _check_domain_spoofing din analyzer compara From-ul unui
+    # mesaj cu Received-ul altui mesaj - INTERNAL_DOMAIN_SPOOF isi pune intrebarea
+    # "a trecut prin infra noastra?" pe lantul gresit.
+    # Cum rezolvi: fie salvezi headerele din forward in campuri separate, nu peste
+    # cele originale, fie adaugi in ParsedEmail un camp care spune ca from_address
+    # vine din corpul mailului, nu din headere, si analyzer-ul tine cont de el.
     if kind == ReportKind.FORWARD_INLINE:
         fwd_headers = extract_forwarded_headers(full_body)
         if fwd_headers.get("from"):

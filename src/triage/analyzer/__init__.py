@@ -24,6 +24,9 @@ def _find_config_dir() -> Path:
         current = current.parent
     return Path(__file__).resolve().parent.parent.parent.parent / "config"
 
+# TODO(curatenie): PROJECT_ROOT nu e folosit nicaieri si oricum indica spre
+# src/, nu spre radacina proiectului (parents[0]=analyzer, [1]=triage, [2]=src).
+# Sterge-l.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = _find_config_dir()
 
@@ -59,11 +62,31 @@ CYBEREADY_LEGACY_DOMAINS = {
 config_domains = set(CYBEREADY_CONFIG.get("sender_domains", []))
 ALL_CYBEREADY_DOMAINS = config_domains.union(CYBEREADY_LEGACY_DOMAINS)
 
+# TODO(curatenie): cele trei constante de mai jos sunt calculate dar nefolosite -
+# is_cybeready_simulation reciteste CYBEREADY_CONFIG pe loc. Alege o varianta:
+# ori le folosesti aici, ori le stergi. CYBEREADY_HEADER_MARKERS (X-CRPS,
+# X-Virtual-MTA) nu e citit de nicaieri, desi comentariul "Semnal 4" din
+# is_cybeready_simulation pretinde ca ar fi. Ori implementezi semnalul, ori
+# scoti comentariul.
 CYBEREADY_IPS = set(CYBEREADY_CONFIG.get("sender_ips", []))
 CYBEREADY_MSG_ID_SUFFIXES = set(CYBEREADY_CONFIG.get("message_id_suffixes", []))
 CYBEREADY_HEADER_MARKERS = CYBEREADY_CONFIG.get("header_markers", {})
 
 # Extensii de atasamente suspecte din attachment_rules.yaml
+#
+# TODO(bug): ".iso" si ".img" nu mai sunt semnalate deloc - e o regresie fata de
+# commit-ul dinainte de 4bb6467, unde erau in lista hardcodata.
+# Ce e gresit: se citesc doar "executable_extensions", "script_extensions" (cheie
+# care nici nu exista in attachment_rules.yaml) si "macro_enabled_extensions".
+# Cheia "archive_extensions", unde stau iso, img, zip, rar, 7z, nu e citita.
+# Verificat: ".exe" -> True, ".docm" -> True, dar ".iso" -> False, ".img" -> False.
+# Fisierele ISO sunt un mod foarte folosit de livrare de malware, tocmai pentru ca
+# trec de filtrele care se uita doar la .exe.
+# Cum rezolvi: adauga "archive_extensions" in reuniune si scoate
+# "script_extensions" care nu exista.
+# Pont general: .get(cheie, []) pe o cheie scrisa gresit nu da niciodata eroare,
+# doar tacere. Merita o verificare la pornire care sa strige daca lipseste o cheie
+# asteptata din config.
 raw_extensions = (
     set(ATTACHMENT_CONFIG.get("executable_extensions", []))
     | set(ATTACHMENT_CONFIG.get("script_extensions", []))
@@ -80,6 +103,19 @@ for ext in raw_extensions:
     else:
         SUSPECT_EXTENSIONS.add(f".{ext_clean}")  #varianta cu punct
 
+# TODO(bug): regex-ul de dubla extensie condamna fisiere perfect normale.
+# Ce e bine: ai trecut de la lista hardcodata la regex-ul din config, corect.
+# Ce e gresit: regex-ul nu pune nicio conditie pe a DOUA extensie -
+#   \.(pdf|doc|docx|xls|xlsx|jpg|png|txt)\.[a-z0-9]{2,4}$
+# Testat pe codul asta:
+#   invoice.pdf.exe   -> MALICIOUS 0.95  (corect)
+#   raport.xls.pdf    -> MALICIOUS 0.95  (fals pozitiv)
+#   poza.jpg.png      -> MALICIOUS 0.95  (fals pozitiv)
+#   contract.doc.docx -> MALICIOUS 0.95  (fals pozitiv)
+# Cum rezolvi: periculoasa e combinatia "pare document, dar e executabil", deci a
+# doua extensie trebuie sa fie una din SUSPECT_EXTENSIONS. Cel mai simplu: lasa
+# regex-ul sa prinda tiparul de dubla extensie, iar dupa ce a prins verifica in
+# cod, la punctul 3 din analyze(), ca extensia finala chiar e in SUSPECT_EXTENSIONS.
 _double_ext_pattern_str = ATTACHMENT_CONFIG.get("suspicious_double_extension_pattern")
 _DOUBLE_EXT_REGEX = _re.compile(_double_ext_pattern_str, _re.IGNORECASE) if _double_ext_pattern_str else None
 
@@ -127,6 +163,22 @@ def is_cybeready_simulation(parsed: ParsedEmail) -> bool:
         h == th or is_subdomain_of(h, th)
         for h in url_hosts for th in tracking_hosts
     )
+    # TODO(securitate, prioritate mare): un hostname de tracking singur da
+    # SIMULATION oricui. Vezi si return-ul de la finalul functiei.
+    # Ce e gresit: toate cele patru semnale intra in acelasi SAU, deci sunt
+    # tratate ca fiind la fel de puternice. Nu sunt. Un Message-ID sau un IP din
+    # Received sunt greu de falsificat; un URL in corpul mailului il pune oricine.
+    # Testat: attacker@totally-evil.tld cu un link catre https://inner.website/...
+    #   -> SIMULATION 1.0
+    # De ce e grav: inner.website e un domeniu generic, scris in
+    # config/cyberready.yaml, care e public in repo. Cine citeste repo-ul poate
+    # sa puna link-ul ala in phishing si sa primeasca automat raspunsul bland de
+    # "a fost doar o simulare". Comentariul din capul lui cyberready.yaml spune
+    # exact asta: un fals pozitiv aici e inacceptabil.
+    # Cum rezolvi: semnalul de tracking trebuie sa CONFIRME un expeditor deja
+    # plauzibil, nu sa decida singur. Cere fie domeniu CyberReady plus un semnal,
+    # fie doua semnale independente. Separa semnalele tari (msgid, ip) de cele
+    # slabe (url) in doua variabile, nu le lasa pe toate in acelasi SAU.
     has_extra_signal = (
         has_msgid_signal or has_auth_suffix_signal or has_ip_signal or has_tracking_signal
     )
@@ -142,8 +194,32 @@ def is_cybeready_simulation(parsed: ParsedEmail) -> bool:
 
     # Fara domeniu confirmat (cazul 01 - forward inline, From e al colegului):
     # cel putin un semnal independent de domeniu.
+    #
+    # BINE: partea asta chiar functioneaza. Testat, forward inline cu
+    # In-Reply-To: <...@mta1.cybereadysmtp.com> -> SIMULATION 1.0. Era partea grea.
+    #
+    # TODO(securitate): aici cade bug-ul cu tracking-ul de mai sus. Cand ajungi
+    # pe linia asta, un simplu link catre inner.website e suficient.
     return has_extra_signal
 
+
+# TODO(prioritate maxima): fisierul asta nu exista, deci toate seturile de mai jos
+# sunt goale, si odata cu ele o gramada de reguli devin cod mort.
+# Ce e gresit: config/company_domains.yaml e in .gitignore (corect, contine nume
+# de servere interne). In repo exista doar company_domains.example.yaml. Pe orice
+# clona noua si in CI, verificat:
+#   TRUSTED_PARTNERS = set()   COMPANY_OWNED  = set()
+#   MAIL_INFRA       = set()   HIGH_RISK_TLDS = set()
+# Adica regula de newsletter legitim (cazul 06), INTERNAL_DOMAIN_SPOOF,
+# LOOKALIKE_DOMAIN si HIGH_RISK_TLD nu se executa NICIODATA in CI. Tot ce s-a
+# scris in commit-ul e53d727 e cod mort acolo, si bug-urile marcate mai jos in
+# _check_domain_spoofing nu pot fi prinse de niciun test cat timp seturile sunt goale.
+# Cum rezolvi: in load_yaml_config, daca fisierul cerut nu exista, incearca
+# varianta .example cu acelasi nume si scrie un logger.warning ca s-a folosit
+# exemplul. Asa CI are date de lucru, iar pe VM fisierul real are prioritate.
+# Datele reale raman in afara git-ului.
+# FA PUNCTUL ASTA PRIMUL - transforma bug-urile din _check_domain_spoofing din
+# teoretice in testabile.
 COMPANY_CONFIG = load_yaml_config("company_domains.yaml")
 TRUSTED_PARTNERS = {d.lower().strip() for d in COMPANY_CONFIG.get("trusted_partners", [])}
 
@@ -210,12 +286,44 @@ def analyze(parsed: ParsedEmail) -> Analysis:
     sender_domain = from_addr.split("@")[-1].lower() if "@" in from_addr else ""
 
     #  spoofing / lookalike de domeniu propriu ---
+    # TODO(bug): aici orice evidenta intoarsa de _check_domain_spoofing devine
+    # MALICIOUS 0.9, indiferent de severitatea ei. Dar 5c construieste evidenta cu
+    # Severity.MEDIUM, deci un expeditor pe .online, fara niciun alt semnal, e
+    # condamnat doar pentru TLD. Testat: news@furnizor.online -> MALICIOUS 0.9.
+    # In plus blocul asta ruleaza INAINTE de regula 6 (partener de incredere) si
+    # inainte de 7 (SPAM), deci le taie pe amandoua.
+    # Cum rezolvi: TLD-ul e un indiciu slab, nu o dovada. Ori adaugi evidenta in
+    # evidence_list fara return si lasi fluxul sa continue, ori mapezi severitatea
+    # la verdict (CRITICAL/HIGH -> MALICIOUS, MEDIUM -> NEEDS_REVIEW).
+    # Regula de urmat peste tot in analizor: severitatea evidentei si verdictul
+    # trebuie sa fie corelate. Daca scrii Severity.MEDIUM, nu intoarce MALICIOUS 0.9.
     spoof_evidence = _check_domain_spoofing(parsed, sender_domain)
     if spoof_evidence:
         evidence_list.append(spoof_evidence)
         return Analysis(verdict=Verdict.MALICIOUS, confidence=0.9, evidence=evidence_list)
 
     # 5. Verificare Prompt Injection
+    # TODO(bug de logica): regula asta face exact invers decat cere cazul 08.
+    # corpus/expected/08_prompt_injection.yaml spune: "verdictul produs cu si fara
+    # textul ascuns trebuie sa fie identic". Ideea cerintei e ca textul ascuns sa
+    # NU poata influenta verdictul, in nicio directie. Regula de aici face din
+    # caracterele ascunse chiar MOTIVUL verdictului MALICIOUS - adica textul ascuns
+    # schimba verdictul, fix ce nu voia cerinta.
+    # Cazul 08 trebuie sa iasa MALICIOUS din semnalele de phishing de credentiale
+    # (link, domeniu, autentificare), iar injectia doar sa fie curatata inainte sa
+    # ajunga la model.
+    # Efect masurat: un newsletter legitim Microsoft cu UN SINGUR caracter
+    # zero-width in corp iese MALICIOUS 0.9 [PROMPT_INJECTION]. Caracterele
+    # zero-width si preheader-ele display:none sunt banale in mailurile de
+    # marketing, deci o sa ai o gramada de falsi pozitivi.
+    # A doua problema: textul ascuns nici macar nu ajunge aici. Vezi TODO-ul de la
+    # ramura text/html din parser (cauta "if not body_text_parts"). Testat pe un
+    # mail de forma cazului 08: textul de injectie nu a ajuns in body_text, iar
+    # verdictul a iesit NEEDS_REVIEW 0.5.
+    # Cum rezolvi: ai deja sanitize_for_model in triage/drafter/__init__.py, aia e
+    # unealta corecta si e deja folosita la construirea prompt-ului. Scoate regula
+    # asta ca sursa de verdict; daca vrei sa pastrezi urma, adauga evidenta
+    # informativa in evidence_list fara return.
     if any(char in body_content for char in ["\u200b", "\u200c", "\u200d", "\u202e"]) or "display:none" in body_content.lower():
         evidence_list.append(
             Evidence(
@@ -296,6 +404,10 @@ def analyze(parsed: ParsedEmail) -> Analysis:
     return Analysis(verdict=Verdict.NEEDS_REVIEW, confidence=0.5, evidence=evidence_list)
 
 
+# TODO: cele trei seturi sunt GOALE pe orice clona noua si in CI, pentru ca
+# company_domains.yaml nu exista in repo. Vezi TODO-ul mare de la
+# "COMPANY_CONFIG = load_yaml_config(...)". Cat timp sunt goale, toata functia
+# _check_domain_spoofing de mai jos e cod mort si nu o poate testa nimeni.
 COMPANY_OWNED = {d.lower().strip() for d in COMPANY_CONFIG.get("owned_domains", [])}
 MAIL_INFRA = {h.lower().strip() for h in COMPANY_CONFIG.get("mail_infrastructure", [])}
 HIGH_RISK_TLDS = {t.lower().strip() for t in COMPANY_CONFIG.get("high_risk_tlds", [])}
@@ -317,6 +429,20 @@ def _check_domain_spoofing(parsed: ParsedEmail, sender_domain: str) -> Evidence 
             )
 
     # 5b. Lookalike fata de domeniile proprii (Levenshtein simplu)
+    # TODO(bug, prioritate maxima): bucla asta marcheaza domeniile NOASTRE ca
+    # MALICIOUS. E cel mai grav fals pozitiv din tot analizorul.
+    # Ce e gresit: se sare peste comparatie doar daca domeniile sunt identice
+    # (sender_domain != owned). Dar domeniile proprii seamana intre ele. Cu lista
+    # din config (exemplu.ro, intern.exemplu.ro, exemplu.com), distanta
+    # Levenshtein intre "exemplu.com" si "exemplu.ro" este 2, deci trece pragul <= 2.
+    # Testat:
+    #   From ceo@exemplu.com (domeniu propriu, prin mx01.exemplu.com)  -> MALICIOUS 0.9
+    #   From hr@exemplu.ro   (domeniu propriu, prin mail1.exemplu.ro)  -> MALICIOUS 0.9
+    # Adica orice mail intern devine malitios.
+    # Cum rezolvi: lookalike are sens doar pentru domenii care NU sunt ale noastre.
+    # Ai deja claims_owned calculat mai sus in aceeasi functie - pune toata bucla
+    # sub "if not claims_owned:". Daca expeditorul e chiar pe un domeniu propriu,
+    # nu are cum sa fie un lookalike al domeniului propriu.
     for owned in COMPANY_OWNED:
         if sender_domain != owned and _levenshtein(sender_domain, owned) <= 2:
             return Evidence(
@@ -327,6 +453,10 @@ def _check_domain_spoofing(parsed: ParsedEmail, sender_domain: str) -> Evidence 
             )
 
     # 5c. TLD cu risc ridicat
+    # TODO(bug): evidenta asta e MEDIUM, dar apelantul din analyze() o transforma
+    # in MALICIOUS 0.9. Vezi TODO-ul de la "spoof_evidence = _check_domain_spoofing".
+    # Un TLD e un indiciu slab, nu o dovada - nu poti condamna un expeditor doar
+    # pentru ca e pe .online.
     tld = "." + sender_domain.rsplit(".", 1)[-1] if "." in sender_domain else ""
     if tld in HIGH_RISK_TLDS:
         return Evidence(

@@ -14,6 +14,20 @@
 
 # Domeniul din From / Return-Path / envelope al mesajelor de simulare.
 # Se potriveste domeniul exact SAU un subdomeniu al lui.
+# TO DO: cele trei domenii comentate mai jos au SLABIT verificarea, nu au
+# intarit-o. Efectul nu e cel asteptat.
+# Ce e gresit: domeniile alea sunt inca in CYBEREADY_LEGACY_DOMAINS, lista
+# hardcodata din src/triage/analyzer/__init__.py. Deci raman domenii CyberReady,
+# dar nu mai sunt "sensibile", si atunci is_cybeready_simulation intoarce True
+# fara sa mai ceara niciun semnal de confirmare. Testat:
+#   From hp@notificaton.online, fara headere de autentificare, fara niciun semnal
+#   -> SIMULATION 1.0
+# Iar forward-urile inline, care sunt formatul principal de raportare, nu au
+# Authentication-Results, deci nici garda de "spf=fail" nu ajuta.
+# Cum rezolvi: decomenteaza-le. Daca chiar trebuiau scoase, scoate-le si din
+# CYBEREADY_LEGACY_DOMAINS, altfel ai doua surse de adevar care se contrazic.
+# Pe termen lung: lista legacy din cod dubleaza fisierul asta - alege una singura.
+# Comentariul de mai sus zice explicit ca fingerprint-ul sta in config, nu in cod.
 sender_domains:
  # - notificaton.online          # From: SCAN <hp@notificaton.online>, d= din DKIM
   #- crsmtp.notificaton.online   # envelope-from / Return-Path

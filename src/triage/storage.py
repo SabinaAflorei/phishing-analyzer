@@ -1,3 +1,9 @@
+# TODO(curatenie): exista doua module numite "storage" cu scopuri complet diferite:
+# asta (scriere sigura de fisiere pe disc, permisiuni 0600) si
+# src/triage/dashboard/storage.py (feedback si override-uri din dashboard).
+# Cine citeste "from triage... import storage" nu are cum sa ghiceasca la care e.
+# Cum rezolvi: redenumeste unul dupa ce face - de exemplu secure_files.py aici,
+# sau feedback_store.py pentru cel din dashboard.
 import os
 from pathlib import Path
 import re

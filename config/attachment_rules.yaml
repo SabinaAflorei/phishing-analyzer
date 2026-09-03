@@ -1,5 +1,16 @@
 # Analiza doar pe metadate. Fisierul NU se deschide si NU se executa.
 executable_extensions: [exe, scr, com, pif, bat, cmd, js, jse, vbs, vbe, wsf, hta, lnk, msi, ps1]
 macro_enabled_extensions: [docm, xlsm, pptm, dotm, xltm, xlam]
+# TODO(bug): cheia asta nu e citita de nicaieri. In analyzer, raw_extensions
+# aduna doar executable_extensions, script_extensions (cheie care nici nu exista
+# aici!) si macro_enabled_extensions. Deci iso, img, zip, rar, 7z, cab nu sunt
+# semnalate deloc. Vezi TODO-ul de la "raw_extensions" din
+# src/triage/analyzer/__init__.py.
 archive_extensions: [zip, rar, 7z, iso, img, cab]
+
+# TODO(bug): regex-ul nu pune nicio conditie pe a DOUA extensie, deci condamna
+# fisiere normale. Testat: raport.xls.pdf, poza.jpg.png si contract.doc.docx ies
+# toate MALICIOUS 0.95. Periculoasa e combinatia "pare document, dar e
+# executabil", deci a doua extensie trebuie sa fie una din SUSPECT_EXTENSIONS.
+# Vezi TODO-ul de la "_double_ext_pattern_str" din src/triage/analyzer/__init__.py.
 suspicious_double_extension_pattern: '\.(pdf|doc|docx|xls|xlsx|jpg|png|txt)\.[a-z0-9]{2,4}$'

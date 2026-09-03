@@ -9,6 +9,11 @@ env:
   # Pana cand cele doua exista, pragul e 0 - altfel CI e rosu din prima zi,
   # pe cod pe care nu l-a scris nimeni inca. Il ridici la 70 in PR-ul care
   # termina analizorul, si de acolo ramane acolo.
+  # TODO: analizorul e terminat de cateva commit-uri, deci momentul descris mai sus
+  # a trecut - pragul e inca 0. Ridica-l la 70, dar DUPA ce adaugi testul care
+  # compara verdictul real cu expected_verdict (vezi TODO din tests/test_corpus.py).
+  # Daca il ridici inainte, CI devine rosu si o sa ajungi sa il dezactivezi, adica
+  # exact ce incearca sa evite comentariul de mai sus.
   COV_MIN: "0"
 
 jobs:
