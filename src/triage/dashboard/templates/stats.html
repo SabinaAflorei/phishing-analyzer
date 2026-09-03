@@ -1,21 +1,113 @@
 {% extends "base.html" %}
-
-{% block title %}Statistici & Metrice Calitate{% endblock %}
+{% block title %}Statistici · Triaj phishing{% endblock %}
 
 {% block content %}
-<p><a href="/">&larr; Inapoi la coada</a></p>
-<h2>Statistici Calitate Sistem</h2>
-
-<div style="display: flex; gap: 20px; margin-top: 20px;">
-  <div style="border: 1px solid #ccc; padding: 15px; border-radius: 5px;">
-    <h3>Acceptare Draft-uri (Tinta: >90%)</h3>
-    <p style="font-size: 2em; font-weight: bold; color: green;">{{ stats.acceptance_rate }}%</p>
-    <small>{{ stats.unchanged_drafts }} din {{ stats.total_processed }} trimise neschimbate</small>
-  </div>
-  <div style="border: 1px solid #ccc; padding: 15px; border-radius: 5px;">
-    <h3>Corectii Verdict</h3>
-    <p style="font-size: 2em; font-weight: bold;">{{ stats.overrides_count }}</p>
-    <small>Verdicte modificate manual de analist</small>
+<div class="page-head">
+  <div>
+    <h1>Calitatea sistemului</h1>
+    <p>Cât de des are dreptate analizorul, și unde greșește.</p>
   </div>
 </div>
+
+{% if stats.total_reports == 0 %}
+<div class="panel">
+  <div class="empty">
+    <h3>Încă nu există date</h3>
+    <p>
+      Statisticile se construiesc din ce face analistul: ciorne trimise
+      neschimbate și verdicte corectate. Apar aici după primele raportări
+      procesate.
+    </p>
+    <p><a href="/">Mergi la coadă</a></p>
+  </div>
+</div>
+
+{% else %}
+<div class="stat-row">
+  <div class="stat {{ 'stat--target' if stats.acceptance_rate >= 90 else 'stat--miss' }}">
+    <span class="stat__label">Ciorne trimise neschimbate</span>
+    <p class="stat__value">{{ stats.acceptance_rate }}%</p>
+    <span class="stat__note">
+      {{ stats.unchanged_drafts }} din {{ stats.total_drafts_sent }} trimise · țintă peste 90%
+    </span>
+  </div>
+  <div class="stat">
+    <span class="stat__label">Verdicte corectate</span>
+    <p class="stat__value">{{ stats.overrides_count }}</p>
+    <span class="stat__note">{{ stats.correction_rate }}% din {{ stats.total_reports }} raportări</span>
+  </div>
+  <div class="stat">
+    <span class="stat__label">Raportări procesate</span>
+    <p class="stat__value">{{ stats.total_reports }}</p>
+    <span class="stat__note">{{ stats.by_status.NEW }} încă neatinse</span>
+  </div>
+</div>
+
+<section class="panel" style="margin-top:var(--s4);">
+  <div class="panel__head">
+    <h2>Distribuția verdictelor</h2>
+    <span class="hint">după corecțiile analistului</span>
+  </div>
+  <div class="panel__body">
+    {#
+      Barele poarta MARIMEA, intr-o singura culoare. Identitatea o poarta
+      eticheta de verdict de langa ele, care contine si cuvantul. Cinci nuante
+      de status nu se pot separa sigur pentru cineva cu daltonism - iar aici
+      oricum nu culoarea e ce compari, ci lungimea.
+    #}
+    <div class="dist">
+      {% for verdict, count in stats.verdict_distribution.items() %}
+      <div class="dist__row">
+        <span class="badge badge--{{ verdict }}">{{ VERDICT_LABELS[verdict] }}</span>
+        <div class="dist__track">
+          <div class="dist__bar" style="width: {{ (count / stats.total_reports * 100)|round(1) }}%"></div>
+        </div>
+        <span class="dist__value">
+          {{ count }}
+          <span class="dist__share">{{ (count / stats.total_reports * 100)|round(0)|int }}%</span>
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel__head">
+    <h2>Ce se corectează</h2>
+    <span class="hint">verdictul automat → verdictul analistului</span>
+  </div>
+  <div class="panel__body {{ 'panel__body--flush' if stats.correction_matrix else '' }}">
+    {% if stats.correction_matrix %}
+    <div class="table-scroll">
+      <table class="matrix">
+        <thead>
+          <tr><th>Analizorul a spus</th><th>Analistul a schimbat în</th><th class="cell-narrow">Cazuri</th></tr>
+        </thead>
+        <tbody>
+          {% for source, targets in stats.correction_matrix.items() %}
+          {% for target, count in targets.items() %}
+          <tr>
+            <td><span class="badge badge--{{ source }}">{{ VERDICT_LABELS[source] }}</span></td>
+            <td>
+              <span class="arrow" aria-hidden="true">→</span>
+              <span class="badge badge--{{ target }}">{{ VERDICT_LABELS[target] }}</span>
+            </td>
+            <td class="cell-narrow numeric">{{ count }}</td>
+          </tr>
+          {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="hint">
+      Niciun verdict corectat până acum. Când apar corecții, tabelul arată care
+      verdict e greșit cel mai des și în ce e schimbat — de acolo știi ce regulă
+      din analizor merită reglată.
+    </p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
 {% endblock %}

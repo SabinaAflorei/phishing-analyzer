@@ -166,13 +166,27 @@ def _decode_part_payload(part: Message) -> str:
     return payload.decode("utf-8", errors="replace")
 
 
+def _is_readable(text: str) -> bool:
+    """Rezultatul unei decodari arata a text scris de om?
+
+    Un base64 invalid se decodeaza cu succes in octeti aleatori, care apoi devin
+    mojibake pe ecran. Mai bine lasam encoded-word-ul asa cum a venit: analistul
+    vede ca headerul e stricat, in loc sa citeasca "iǬ���z�^m�".
+    """
+    if not text.strip():
+        return False
+    bad = sum(1 for ch in text if ch == "\ufffd" or (ord(ch) < 32 and ch not in "\t\n\r"))
+    return bad / len(text) < 0.1
+
+
 def _decode_b64(match: Match[str]) -> str:
     raw = re.sub(r"[^A-Za-z0-9+/=]", "", match.group(1).strip())
     raw += "=" * (-len(raw) % 4)
     try:
-        return base64.b64decode(raw).decode("utf-8", errors="replace")
-    except (binascii.Error, ValueError):
+        text = base64.b64decode(raw).decode("utf-8")
+    except (binascii.Error, ValueError, UnicodeDecodeError):
         return match.group(0)
+    return text if _is_readable(text) else match.group(0)
 
 
 def _decode_qp(match: Match[str]) -> str:
