@@ -29,15 +29,13 @@ INJECTIE = (
 
 INVIZIBILE = "​‌‍‮﻿⁠"
 
-CORP_VIZIBIL = (
-    "Contul dumneavoastra expira. Va rugam sa va autentificati si sa confirmati parola."
-)
+CORP_VIZIBIL = "Contul dumneavoastra expira. Va rugam sa va autentificati si sa confirmati parola."
 
 
 def _mail(html_extra: str = "", text_extra: str = "") -> bytes:
     """Acelasi mail, cu si fara continutul ascuns. Singura variabila e injectia."""
     return (
-        "From: \"Serviciul de Securitate\" <secure@account-verify-mail.top>\n"
+        'From: "Serviciul de Securitate" <secure@account-verify-mail.top>\n'
         "To: ion.stanciu@exemplu.ro\n"
         "Subject: Verificare obligatorie a contului\n"
         "Authentication-Results: mx.exemplu.ro; spf=fail; dkim=fail; dmarc=fail\n"
@@ -129,7 +127,9 @@ def test_un_zero_width_intr_un_mesaj_curat_nu_produce_malicious() -> None:
 
 @pytest.mark.parametrize("char", list("​‌‍‮﻿⁠"))
 def test_niciun_caracter_invizibil_nu_muta_verdictul_singur(char: str) -> None:
-    curat = b"From: user@company.com\nAuthentication-Results: spf=pass dkim=pass dmarc=pass\n\nSalut."
+    curat = (
+        b"From: user@company.com\nAuthentication-Results: spf=pass dkim=pass dmarc=pass\n\nSalut."
+    )
     murdar = (
         f"From: user@company.com\n"
         f"Authentication-Results: spf=pass dkim=pass dmarc=pass\n\nSalut{char}."

@@ -350,9 +350,7 @@ def _header_consistency_evidence(parsed: ParsedEmail) -> list[Evidence]:
 
     # Pe listele de mail, Return-Path e adresa de bounce a platformei si difera
     # legitim de From. Nu semnalam acolo.
-    is_mailing_list = any(
-        name in {"list-unsubscribe", "list-id"} for name in parsed.header_names
-    )
+    is_mailing_list = any(name in {"list-unsubscribe", "list-id"} for name in parsed.header_names)
 
     reply_domain = _comparable_domain(_domain_of(parsed.reply_to))
     if reply_domain and reply_domain != from_domain:

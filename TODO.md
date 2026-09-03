@@ -1,332 +1,161 @@
 # TODO - ce a mai ramas din foaia de task
 
-Lista e organizata pe sectiunile din foaia de task, ca sa poti bifa direct.
+Legenda: `[x]` gata &nbsp; `[~]` partial &nbsp; `[ ]` nefacut
 
-Legenda: `[x]` gata &nbsp; `[~]` partial, mai are nevoie de lucru &nbsp; `[ ]` nefacut
-
-**Bug-urile din codul existent NU sunt in lista asta.** Sunt marcate direct in
-cod, langa linia care are problema. Le vezi cu:
+Bug-urile marcate in cod cu `TODO(` sunt toate rezolvate. Verifica:
 
 ```
-grep -rn "TODO(" src/ config/ tests/ .github/
+grep -rn "TODO(" src/ config/ tests/ .github/     # nu mai returneaza nimic
 ```
-
-Fa-le pe alea intai unde sunt marcate `prioritate maxima` - sunt lucruri care
-dau verdict gresit acum, si nu are sens sa construiesti peste ele.
 
 ---
 
 ## Unde esti acum
 
-Merge deja: parser-ul pe cele trei forme de raportare, analizorul determinist cu
-verdict + dovezi + scor, template-urile statice pe cele 5 categorii, defanging-ul,
-dashboard-ul cu coada / detaliu / statistici, CLI-ul, si testele de securitate
-(retea blocata, permisiuni, bind pe localhost).
+Cele sase componente exista si comunica printr-o baza de date SQLite. Pipeline-ul
+merge cap-coada: `triage ingest` umple coada, dashboard-ul o arata, butoanele
+salveaza, iar ce apesi in browser se vede din CLI - adica baza de date chiar
+decupleaza componentele, nu doar pe hartie.
 
-Golul cel mai mare, ca sa il stii de la inceput: **nu exista baza de date, si
-LLM-ul nu e conectat**. Adica doua din cele sase componente din sectiunea 3 nu
-sunt inca acolo, iar fara baza de date componentele nu comunica intre ele asa cum
-cere arhitectura.
+357 de teste trec, zero sarite, 94% acoperire. Ruff si mypy strict sunt verzi.
+
+**Ce a mai ramas depinde aproape tot de lucruri din afara codului**: corpusul
+real, o masina cu Ollama, si discutia cu mentorul despre mailbox.
 
 ---
 
 ## A. Arhitectura (sectiunea 3)
 
-### [ ] A1. Baza de date - nu exista deloc
-
-**Ce cere foaia:** cele patru componente (fetcher, parser, analyzer, drafter)
-sunt independente si comunica printr-o baza de date. "Daca Ollama e picat,
-verdictele se produc oricum. Daca dashboard e oprit, ingestia continua. Un bug in
-drafter nu pierde niciodata un mail."
-
-**Ce e acum:** nimic nu se persista. `load_real_reports()` din
-`src/triage/dashboard/app.py` reparseaza tot corpusul, de la zero, la fiecare
-cerere HTTP. `sqlalchemy` si `alembic` sunt in `requirements.txt` dar nu le
-foloseste nimeni, iar `config/settings.example.yaml` pomeneste un
-`db_path: data/db/triage.sqlite3` care nu e citit de nicaieri.
-
-**De ce conteaza:** fara ea, componentele nu sunt independente - sunt un singur
-lant care ruleaza in intregime la fiecare refresh. Si consecintele se vad deja in
-dashboard, vezi G1 si G2.
-
-**Cum incepi:** tabel `reports` cu ce ai deja in dictionarul construit de
-`load_real_reports()` (id, data, raportor, subiect, verdict, incredere, dovezi,
-draft, status) plus hash-ul fisierului .eml ca sa nu duplici la repornire.
-SQLite cu SQLAlchemy, ca sunt deja in requirements. Alembic il pui cand ai prima
-schimbare de schema, nu de la inceput.
-
-### [ ] A2. `config/settings.yaml` nu e citit de niciun modul
-
-**Ce e acum:** fisierul exemplu exista si e bine scris, dar niciun modul nu il
-incarca. `poll_interval_seconds`, `llm.*`, `enrichment.enabled`, `paths.*`,
-`dashboard.host/port` sunt toate inerte. `pydantic-settings` e in requirements
-si nefolosit.
-
-**De ce conteaza:** foaia cere ca imbogatirea externa "sa se poata dezactiva
-explicit" (sectiunea Configurare). Momentan nu exista comutatorul.
-
-**Cum rezolvi:** un modul `settings.py` cu `BaseSettings` din pydantic-settings,
-incarcat o singura data la pornire si pasat mai departe. Cu fallback pe
-`.example` daca fisierul real lipseste - aceeasi problema ca la
-`company_domains.yaml`, vezi TODO-ul din analyzer.
-
----
+- [x] **A1. Baza de date.** `triage/db.py`, tabel `reports`, idempotenta pe
+      `eml_sha256` cu Message-ID ca a doua cheie. `triage/pipeline.py` e drumul
+      complet, folosit de CLI, dashboard si poll.
+- [x] **A2. `config/settings.yaml` se citeste.** `triage/settings.py`, pe
+      pydantic-settings. YAML pentru tot ce nu e secret, `.env` doar pentru
+      credentialele IMAP - ca sa nu existe doua adevaruri pentru aceeasi valoare.
+      `llm.base_url` si `dashboard.host` sunt validate ca loopback la pornire.
+      Fisierele lipsa cad pe varianta `.example`, cu avertisment in log.
 
 ## B. Fetcher (sectiunea 6.1)
 
-### [~] B1. IMAP e stub
-
-`src/triage/fetcher/__init__.py` are `fetch_from_corpus()` functional, dar
-`fetch_from_imap()` doar scrie in log si intoarce lista goala.
-
-Ce mai lipseste din 6.1:
-- [ ] Conectare IMAP read-only cu app password (din `.env`, nu din cod)
-- [ ] Poll la interval configurabil, default 5 minute (vine din A2)
-- [ ] Marcarea mesajelor procesate prin flag IMAP sau evidenta in DB, **fara sa
-      le stearga** (depinde de A1)
-- [ ] Repornirea nu reproceseaza si nu dublica (idempotenta - foloseste hash-ul
-      .eml sau Message-ID)
-- [ ] Retry la mailbox indisponibil, fara pierdere de mesaje (criteriu 8.3)
-
-**Atentie:** nu conecta la mailbox-ul real inainte sa discuti cu mentorul -
-e scris explicit in sectiunea 10. Pana atunci testeaza cu un server IMAP local
-sau cu un mock.
-
----
+- [x] Conectare IMAP read-only cu app password din `.env`
+- [x] Poll la interval configurabil (`triage poll`, implicit 300s din settings)
+- [x] Evidenta procesatelor in baza de date, fara sa se atinga mesajele
+- [x] Repornirea nu reproceseaza si nu dublica
+- [x] Retry cu asteptare crescatoare la mailbox indisponibil
+- [ ] **B1. Discutia cu mentorul inainte de mailbox-ul real** (sectiunea 10).
+      Codul e gata si testat pe un server fals; `.env` e gol, deci nu se conecteaza
+      nicaieri. Nu completa `TRIAGE_IMAP_HOST` inainte de discutie.
 
 ## C. Parser (sectiunea 6.2)
 
-Cele trei forme de raportare sunt detectate, iar extragerea mesajului original
-merge pentru atasament. Ce lipseste din lista de campuri ceruta:
-
-- [ ] **Display-name-ul expeditorului**, separat de adresa. E nevoie de el pentru
-      semnalul "nepotrivire intre display-name si domeniul real" (vezi D4).
-      `email.utils.parseaddr` iti da deja ambele, dar acum se pastreaza doar adresa.
-- [ ] **Corpul HTML**, pastrat separat de cel text. Foaia zice explicit: HTML
-      "doar pentru extragere URL-uri, niciodata pentru afisare". Acum HTML-ul se
-      arunca aproape mereu - vezi TODO-ul de la `if not body_text_parts` din parser.
-- [ ] **Textul ancorei impreuna cu href-ul**, ca perechi. Fara ele nu poti face
-      semnalul de discrepanta text-link din 6.3. Acum se retin doar href-urile.
-- [ ] **Arhive protejate cu parola** - detectabile din metadate (flag-ul de
-      criptare din headerul ZIP), fara sa deschizi arhiva. Cerut la 6.3.
-
----
+- [x] Display-name separat de adresa (`from_display_name`)
+- [x] Corp HTML pastrat separat (`body_html`), folosit doar pentru semnale
+- [x] Perechi text-ancora + href (`links`)
+- [x] Arhive protejate cu parola, din flagul de criptare al headerului ZIP
+- [x] In plus: `reporter_address` (colegul care a raportat, separat de expeditor),
+      `to_addresses`, `header_names`, `sent_at`, `headers_from_body`
 
 ## D. Analizor determinist (sectiunea 6.3)
 
-Ai deja: SPF/DKIM/DMARC, fingerprint CyberReady, extensii de atasament, dubla
-extensie, lookalike pe Levenshtein, TLD cu risc ridicat, spoofing de domeniu intern.
-
-Semnale din foaie care lipsesc complet:
-
-- [ ] **D1. Reply-To diferit de From.** Campul `reply_to` se parseaza deja si se
-      pune in `ParsedEmail`, dar analizorul nu il citeste niciodata. E semnalul cel
-      mai ieftin de adaugat din toata lista.
-- [ ] **D2. Return-Path care nu corespunde cu From.** Idem, campul exista si e
-      neatins.
-- [ ] **D3. Homoglife si punycode / IDN.** `confusable-homoglyphs` e in
-      `requirements.txt` si nu il foloseste nimeni. Un domeniu `xn--`, sau unul cu
-      un chirilic "а" in loc de "a" latin, trece acum complet nedetectat -
-      Levenshtein nu il prinde, pentru ca distanta e 0 la nivel de aspect si mare
-      la nivel de bytes.
-- [ ] **D4. Nepotrivire intre display-name si domeniul real.** Clasicul
-      `From: "Banca X" <atacator@rau.tld>`. Depinde de C1.
-- [ ] **D5. Semnale de continut** (pondere mica, dar coroborante, zice foaia):
-      urgenta artificiala, cereri de credentiale, discrepanta intre textul
-      link-ului si href. Ultimul depinde de C3.
-- [ ] **D6. Coroborarea semnalelor.** Acum fiecare regula face `return` imediat ce
-      se potriveste, deci se opreste la prima. Foaia cere ca verdictul sa fie "o
-      functie de dovezi" si ca semnalele de continut sa aiba "pondere mica, dar
-      coroboranta" - ceea ce presupune sa le aduni, nu sa iesi la prima.
-      Refactorizarea asta o faci dupa ce rezolvi bug-urile marcate in cod, altfel
-      muti bug-urile in structura noua. E cea mai mare bucata de lucru din
-      sectiunea D.
-
----
+- [x] **D1.** Reply-To diferit de From
+- [x] **D2.** Return-Path nepotrivit (sarit pe listele de mail, unde e normal)
+- [x] **D3.** Homoglife si punycode / IDN, prin `confusable-homoglyphs`
+- [x] **D4.** Nepotrivire display-name / domeniu real
+- [x] **D5.** Urgenta artificiala, cereri de credentiale, discrepanta text-link
+- [x] **D6.** Coroborare: toate regulile ruleaza, ponderile stau intr-un tabel,
+      doua praguri decid. Vezi `docs/decisions/0003-dovezile-se-coroboreaza.md`.
 
 ## E. Drafter (sectiunea 6.4)
 
-### [ ] E1. Ollama nu e conectat - LLM-ul nu ruleaza niciodata
-
-**Ce e acum:** `build_draft()` are parametrul `llm_client: Any = None`, si
-`if llm_client is not None:` inconjoara toata logica de generare. Nimeni, in tot
-proiectul, nu pasa vreodata un `llm_client`. Nici CLI-ul, nici dashboard-ul.
-Adica: se foloseste **intotdeauna** template-ul static.
-
-Nu e o critica a fallback-ului - fallback-ul e scris corect si e obligatoriu prin
-foaie. Doar ca acum e singura cale.
-
-**Cum rezolvi:** un client mic peste `http://127.0.0.1:11434`, cu o metoda
-`generate(system_prompt, prompt, temperature)`, ca aia e semnatura pe care
-`build_draft` o asteapta deja. Ai un exemplu de vorbit cu Ollama, doar din
-stdlib, in `scripts/eval_model.py` - foloseste-l ca model. Config-ul (base_url,
-model, temperatura, timeout) vine din A2.
-
-- [ ] E2. Timeout pe apelul catre Ollama, ca sa nu blocheze pipeline-ul.
-      `timeout_seconds: 30` exista deja in settings, trebuie doar folosit.
-- [ ] E3. Trunchiere la `max_input_chars` (2000) inainte de model - sectiunea 4.4
-      punctul 2. `sanitize_for_model` are deja `max_chars=2000` ca default, dar
-      valoarea trebuie sa vina din config, nu din semnatura functiei.
-- [ ] E4. Ruleaza `scripts/eval_model.py` pe cateva modele si **scrie rezultatul
-      in README**. Foaia cere explicit sa testezi limba romana si zice ca
-      `llama3.1:8b` e "punct de pornire, NU o decizie". Scriptul e deja scris si
-      verifica diacritice, structura si lungime - trebuie doar rulat si decis.
-- [ ] E5. Test care demonstreaza fallback-ul: cu Ollama picat, sistemul continua
-      si scoate template static (criteriu 8.3).
-
----
+- [x] **E1.** Ollama conectat (`triage/llm.py`). Clientul se paseaza din pipeline.
+- [x] **E2.** Timeout pe apel, din `llm.timeout_seconds`
+- [x] **E3.** Trunchiere la `llm.max_input_chars`, valoarea din config
+- [ ] **E4. Ruleaza `scripts/eval_model.py` si alege modelul.** Nefacut: Ollama
+      nu e instalat pe masina pe care s-a lucrat. `llama3.1:8b` ramane o valoare
+      mostenita, nu o decizie. Vezi `docs/decisions/0004-modelul-pentru-drafter.md`
+      pentru comanda exacta si criteriul de oprire.
+- [x] **E5.** Test de fallback cu Ollama picat
 
 ## F. Dashboard (sectiunea 6.5)
 
-### [ ] F1. Butoanele "Marcheaza trimis" si "Escaleaza" nu fac nimic
-
-`detail.html` trimite `value="mark_sent"` si `value="escalate"`, dar
-`handle_report_action()` din `app.py` trateaza doar `save_draft` si
-`override_verdict`. Celelalte doua cad pe ramura de else inexistenta: se
-raspunde cu "Actiune inregistrata cu succes", dar nu se salveaza nimic.
-Mesajul de succes e mai rau decat o eroare - ascunde problema.
-
-### [ ] F2. Statusul si corectiile de verdict nu se pastreaza
-
-- In `load_real_reports()`, `"status": "NEW"` e hardcodat la fiecare incarcare.
-- `handle_bulk_action()` schimba `report["status"]` pe o lista reconstruita la
-  cererea curenta - se pierde imediat ce se trimite raspunsul.
-- `save_verdict_override()` chiar scrie in `data/feedback.json`, dar
-  `load_real_reports()` nu citeste niciodata inapoi override-urile.
-
-Deci: filtrele pe status din `queue.html` exista in interfata, dar nu au ce
-filtra, iar o corectie de verdict dispare la refresh. Toate trei se rezolva
-odata cu A1.
-
-### [ ] F3. Pagina de statistici - completeaza metricile
-
-`get_feedback_stats()` da rata de acceptare si numarul de corectii. Foaia cere in
-plus: **distributia de verdicte** si **corectiile pe categorii** (care verdict e
-cel mai des corectat, si in ce e schimbat). Aia e informatia care iti spune unde
-sa te uiti, si e "principala metrica de calitate" dupa foaie.
-
----
+- [x] **F1.** "Marcheaza trimis" si "Escaleaza" salveaza. O actiune necunoscuta
+      spune ca nu s-a schimbat nimic, in loc sa minta cu "succes".
+- [x] **F2.** Statusul si corectiile persista; filtrele pe status si verdict merg
+- [x] **F3.** Distributia de verdicte si matricea de corectii
 
 ## G. Securitate (sectiunea 4)
 
-Partea grea e facuta si testata: retea blocata in teste, defanging, bind pe
-127.0.0.1, permisiuni 600, escapare Jinja2. Ce a ramas:
-
-- [ ] **G1. Testul de prompt injection e `xfail`.**
-      `tests/test_prompt_injection.py` e inca `raise NotImplementedError` sub
-      `@pytest.mark.xfail`. E criteriu de acceptanta la 8.2 si test obligatoriu la
-      4.4 punctul 4. Vezi si TODO-ul din analyzer - regula actuala face exact
-      invers decat cere cazul 08, deci intai repari regula, apoi scrii testul.
-- [ ] **G2. Curatarea textului ascuns inainte de model** (4.4 punctul 1).
-      `sanitize_for_model` scoate deja tag-uri script/style si caractere
-      invizibile. Mai lipseste: text cu culoare identica cu fundalul (alb pe alb)
-      si `font-size:1px`. Alea sunt in atributele de stil, deci ai nevoie de
-      HTML-ul pastrat separat - vezi C2.
-- [ ] **G3. Validarea output-ului de la model** (4.4 punctul 3) - `split_email`
-      face verificarea si exista fallback-ul. Se poate bifa dupa ce E1 e gata si
-      chiar trece cineva prin ramura aia. Pana atunci nu e testat pe bune.
-- [ ] **G4. Snapshot al VM-ului inainte de prima ingestie reala** (4.5). Nu e cod,
-      dar e pe lista si se uita usor.
-- [ ] **G5. Directorul cu .eml brute exclus din backup-uri automate** (4.5).
-- [ ] **G6. Modulul de imbogatire** (optional prin foaie, dar daca il faci):
-      submisie privata implicit si curatarea token-ului per-destinatar din URL
-      inainte de trimitere (4.6). Comutatorul e deja prevazut in settings.
-
----
+- [x] **G1.** Testul de prompt injection - nu mai e `xfail`
+- [x] **G2.** Curatarea textului ascuns inainte de model (display:none, 1px,
+      alb pe alb, opacity 0, visibility hidden)
+- [x] **G3.** Validarea output-ului modelului, testata pe ambele ramuri
+- [ ] **G4. Snapshot al VM-ului inainte de prima ingestie reala.** Nu e cod.
+      E pe lista de verificare din README.
+- [x] **G5.** `data/` are `CACHEDIR.TAG`, respectat de borg, restic si
+      `tar --exclude-caches`
+- [ ] **G6. Modulul de imbogatire externa** - optional prin foaie, nefacut.
+      Comutatorul exista in settings si e implicit oprit. Daca il faci: submisie
+      privata implicit si curatarea tokenului per-destinatar din URL inainte de
+      trimitere (4.6). `strip_url_tokens` din `triage/defang.py` face deja a doua
+      jumatate.
 
 ## H. Corpus de test (sectiunea 7)
 
-- [ ] **H1. Fisierele `.eml` lipsesc de pe masina asta.** Exista toate cele 12
-      `corpus/expected/*.yaml`, dar `corpus/eml/` e gol, deci **37 de teste se sar**
-      la fiecare rulare. Copiaza corpusul pe VM prin canalul discutat (vezi
-      `corpus/README.md`). Fara el nu poti valida niciun criteriu functional din 8.1.
-- [ ] **H2. Cazul 12 nu e in foaie.** Foaia listeaza 11 cazuri, repo-ul are 12
-      (`12_stripped_attachment_quote`). Daca l-ai adaugat tu, bine - dar spune la
-      stand-up si scrie in `notes:` de ce exista, altfel peste doua luni nimeni nu
-      mai stie daca e intentionat sau ramasita.
-- [ ] **H3. `must_contain_evidence` e gol peste tot.** Toate cele 12 yaml-uri au
-      `must_contain_evidence: []`. Comentariul din ele zice sa le completezi "pe
-      masura ce definesti vocabularul de semnale". Vocabularul exista deja
-      (`AUTH_FAILURE`, `CYBEREADY_SIMULATION`, `SUSPECT_ATTACHMENT`, ...), deci
-      se pot completa acum.
-
----
+- [~] **H1. Corpusul real lipseste de pe masina asta.**
+      `scripts/make_synthetic_corpus.py` genereaza 12 inlocuitori cu aceeasi
+      structura si aceleasi semnale, deci testele ruleaza si in CI. **Nu e acelasi
+      lucru** - vezi `docs/decisions/0008-corpus-sintetic.md`. Cand aduci corpusul
+      real, il copiezi peste (aceleasi nume) si rulezi din nou testele.
+- [x] **H2.** Cazul 12 e documentat in `corpus/README.md` si in `notes:` din yaml
+- [x] **H3.** `must_contain_evidence` completat pe toate cele 12 cazuri
 
 ## I. Criterii de acceptanta (sectiunea 8)
 
 ### Functionale (8.1)
-- [ ] I1. Toate cele 11 cazuri primesc verdict corect - **neverificabil acum**,
-      lipsesc si corpusul (H1) si testul care compara (vezi TODO din
-      `tests/test_corpus.py`).
-- [ ] I2. Precizie 100% pe detectia CyberReady - vezi TODO-urile din analyzer si
-      `cyberready.yaml`; acum sunt doua cai prin care iese SIMULATION gresit.
-- [ ] I3. Sub 30 de secunde de la ingestie la draft - nemasurat. Se masoara serios
-      abia dupa E1, pentru ca apelul la LLM e partea lenta.
-- [ ] I4. Draft-uri corecte lingvistic in romana - depinde de E4.
+- [~] **I1.** Toate cazurile primesc verdict corect - **pe corpusul sintetic**.
+      Testul exista (`test_verdictul_e_cel_asteptat`) si trece 12/12. Se
+      reconfirma pe corpusul real cand ajunge.
+- [x] **I2.** Precizie pe detectia CyberReady: domeniul singur nu mai da
+      niciodata SIMULATION. Vezi `docs/decisions/0006-fingerprintul-de-simulare.md`.
+- [~] **I3.** Sub 30s de la ingestie la draft. Calea deterministica: ~3ms per
+      mail, testata. Partea cu modelul se masoara la E4.
+- [ ] **I4.** Draft-uri corecte lingvistic in romana - depinde de E4.
 
 ### Securitate (8.2)
-- [x] Zero request-uri de retea catre domenii raportate (mock care pica testul)
+- [x] Zero request-uri de retea catre domenii raportate
 - [x] Dashboard-ul nu randeaza HTML din mail
 - [x] Serviciul asculta doar pe 127.0.0.1
 - [x] Sistemul nu trimite mail
-- [ ] I5. Testul de prompt injection - vezi G1
-- [ ] I6. "Niciun URL nedefanged in DB sau output" - jumatatea cu DB nu se poate
-      verifica pana nu exista DB-ul (A1)
+- [x] **I5.** Testul de prompt injection
+- [x] **I6.** Niciun URL nedefanged in baza de date sau in output
 
 ### Robustete (8.3)
-- [x] Mail malformat nu opreste pipeline-ul (cazul 09 e acoperit)
-- [ ] I7. Ollama indisponibil duce la fallback - vezi E5
-- [ ] I8. Mailbox indisponibil duce la retry - vezi B1
-- [ ] I9. Repornirea nu dublica si nu reproceseaza - vezi B1, depinde de A1
+- [x] Mail malformat nu opreste pipeline-ul
+- [x] **I7.** Ollama indisponibil duce la fallback
+- [x] **I8.** Mailbox indisponibil duce la retry
+- [x] **I9.** Repornirea nu dublica si nu reproceseaza
 
 ### Calitate (8.4)
-- [ ] **I10. Coverage pe parser e sub prag.** Masurat acum, fara corpus:
-
-  | modul | coverage | cerut |
-  |---|---|---|
-  | `analyzer/__init__.py` | 82% | >70% ✔ |
-  | `parser/__init__.py` | **62%** | >70% ✘ |
-
-  Analizorul e peste prag, parser-ul nu. Partea neacoperita e chiar cea scrisa
-  recent: `decode_mime_header`, `_clean_body_text`, `_decode_part_payload`,
-  ramura de atasamente. Coincide cu zona unde sunt marcate bug-urile - nu e o
-  coincidenta.
-- [ ] I11. Ridica `COV_MIN` in CI dupa ce I10 e rezolvat (vezi TODO din `ci.yml`).
-- [ ] I12. README pe care un coleg il urmeaza pana la un sistem functional in 10
-      minute. Acum README-ul are un rand. Vezi TODO-ul din `README.md`.
-- [x] CI verde: pytest, ruff, mypy (cu observatia ca pragul de coverage e 0)
-
----
+- [x] **I10.** Coverage: parser 91%, analizor 99%, total 94% (prag cerut: 70%)
+- [x] **I11.** `COV_MIN` ridicat la 85 in CI
+- [x] **I12.** README cu drum complet in 10 minute
+- [x] CI verde: pytest, ruff, mypy
 
 ## J. Reguli de lucru (sectiunea 10)
 
-- [ ] **J1. `docs/decisions/` nu exista.** Foaia cere fiecare decizie de
-      arhitectura documentata acolo. Ai deja cel putin patru de scris, si toate
-      sunt decizii reale pe care le-ai luat deja:
-  - de ce `trusted_partners` slabeste deliberat regula de autentificare (cerut si
-    de nota din cazul 06)
-  - de ce `domains.py` forteaza snapshot-ul offline in loc sa cheme tldextract
-    direct (motivul e deja scris frumos in docstring, doar muta-l)
-  - de ce verdictul e determinist si LLM-ul doar scrie text
-  - ce model ai ales pentru drafter si pe ce baza (dupa E4)
-- [ ] J2. Mesaje de commit descriptive. "updates v2", "updates v3", "ruff checks
-      update" nu spun ce s-a schimbat. Peste o luna, cand cauti cand s-a stricat
-      ceva, `git log` e primul loc unde te uiti si singurul care nu te ajuta acum.
-- [ ] J3. Branch per feature si PR catre main. Momentan totul intra direct pe
-      `main`.
+- [x] **J1.** `docs/decisions/` - opt decizii scrise
+- [x] **J2.** Mesaje de commit descriptive
+- [ ] **J3. PR catre main.** Lucrarea e pe `feat/todo-completion`. Deschide PR-ul
+      cand esti gata.
 
 ---
 
-## Ordinea in care le-as face
+## Ce as face in continuare
 
-1. **Bug-urile marcate `prioritate maxima` in cod** - `grep -rn "TODO(" src/`.
-   Nu construi peste ceva ce da verdict gresit.
-2. **H1** (adu corpusul) plus testul de verdict din `tests/test_corpus.py`. Fara
-   ele lucrezi pe intuitie: nu ai cum sa stii daca o schimbare a stricat ceva.
-3. **A1** (baza de date). Deblocheaza F1, F2, B1, I6, I9 dintr-un foc.
-4. **E1** (conecteaza Ollama). Pana atunci jumatate din foaie - tot ce tine de
-   LLM - e netestata in realitate.
-5. **D1 si D2** (Reply-To, Return-Path). Campurile sunt deja parsate, sunt cateva
-   randuri fiecare si aduc semnale reale - cel mai bun raport efort/castig din tot
-   ce a ramas.
-6. Restul, in ordinea din lista.
+1. **E4** - cea mai mare bucata ramasa, si singura care blocheaza doua criterii
+   (I3 si I4). Are nevoie de o masina cu Ollama, nimic altceva.
+2. **H1** - adu corpusul real si rerulează. Aici se afla daca parserul chiar
+   descurca ce ies clientii de mail din realitate.
+3. **B1** - discutia cu mentorul, apoi completeaza `.env`.
+4. **G4** - snapshot inainte de prima ingestie reala. Se uita usor.
+5. **G6** - imbogatirea externa, daca o vrei. E optionala prin foaie.

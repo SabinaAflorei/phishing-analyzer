@@ -242,7 +242,7 @@ def test_dashboardul_nu_randeaza_html_din_mail() -> None:
         b"From: rau@evil.example\n"
         b"To: coleg@exemplu.ro\n"
         b"Subject: <script>alert(1)</script>\n"
-        b'Content-Type: text/html; charset=utf-8\n'
+        b"Content-Type: text/html; charset=utf-8\n"
         b"\n"
         b'<b>ingrosat</b><img src=x onerror="alert(1)">\n'
     )

@@ -14,9 +14,21 @@ from triage.verdicts import Analysis, Verdict
 logger = logging.getLogger(__name__)
 
 GENERIC_TERMS = {
-    "scan", "serviciul", "service", "no-reply", "noreply",
-    "support", "admin", "notification", "notifications", "info",
-    "helpdesk", "ticketing", "desk", "system", "securitate",
+    "scan",
+    "serviciul",
+    "service",
+    "no-reply",
+    "noreply",
+    "support",
+    "admin",
+    "notification",
+    "notifications",
+    "info",
+    "helpdesk",
+    "ticketing",
+    "desk",
+    "system",
+    "securitate",
 }
 
 # Text ascuns: alb pe alb, 1px, display:none, opacitate zero, off-screen.
@@ -32,9 +44,7 @@ HIDDEN_STYLE_RE = re.compile(
 )
 
 # Invizibile si de control al directiei, inclusiv FEFF, 2060 si 2066-2069.
-INVISIBLE_CHARS_RE = re.compile(
-    r"[​-‍‎‏‪-‮﻿⁠⁦-⁩]"
-)
+INVISIBLE_CHARS_RE = re.compile(r"[​-‍‎‏‪-‮﻿⁠⁦-⁩]")
 
 DEFAULT_MAX_INPUT_CHARS = 2000
 
@@ -105,7 +115,11 @@ def extract_first_name(from_header: str) -> str | None:
     first_word = display_name.split()[0] if display_name else ""
     first_word_clean = re.sub(r"[^a-zA-ZăâîșțĂÂÎȘȚ-]", "", first_word)
 
-    if not first_word_clean or first_word_clean.lower() in GENERIC_TERMS or len(first_word_clean) < 2:
+    if (
+        not first_word_clean
+        or first_word_clean.lower() in GENERIC_TERMS
+        or len(first_word_clean) < 2
+    ):
         return None
 
     return first_word_clean.capitalize()

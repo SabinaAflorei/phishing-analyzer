@@ -4,6 +4,7 @@ from triage.defang import defang
 from triage.defang import refang
 from triage.defang import strip_url_tokens
 
+
 def test_defang_url() -> None:
     assert defang("https://link-rau.com/login") == "hxxps[://]link-rau[.]com/login"
 
@@ -21,6 +22,7 @@ def test_defang_is_idempotent_enough() -> None:
 def test_refang() -> None:
     assert refang("hxxps[://]example[.]com") == "https://example.com"
 
+
 def test_strip_url_tokens_removes_sensitive_params() -> None:
     raw_url = "https://phishing.test/reset?token=abc123secret&user=ion"
     cleaned = strip_url_tokens(raw_url)
@@ -37,6 +39,7 @@ def test_strip_url_tokens_multiple_sensitive_keys() -> None:
     assert "access_token=[STRIPPED]" in cleaned
     assert "api_key=[STRIPPED]" in cleaned
     assert "redirect=home" in cleaned
+
 
 def test_defang_nu_stalceste_text_care_nu_e_url() -> None:
     """defang() primeste subiecte, corpuri si headere, nu doar URL-uri.

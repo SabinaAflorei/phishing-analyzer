@@ -6,7 +6,7 @@ import socket
 
 import httpx
 import pytest
-from pytest_socket import SocketBlockedError # type: ignore[import-untyped]
+from pytest_socket import SocketBlockedError  # type: ignore[import-untyped]
 
 
 def test_socket_is_blocked_by_default() -> None:

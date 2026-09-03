@@ -46,9 +46,7 @@ class IngestResult:
     errors: list[str] = field(default_factory=list)
 
     def __str__(self) -> str:
-        return (
-            f"{self.ingested} noi, {self.skipped} deja existente, {self.failed} esuate"
-        )
+        return f"{self.ingested} noi, {self.skipped} deja existente, {self.failed} esuate"
 
 
 def _evidence_rows(analysis: Any) -> list[dict[str, str]]:
@@ -105,7 +103,8 @@ def ingest_bytes(
             source_ref=source_ref,
             raw_eml_path=raw_eml_path,
             received_at=parsed.sent_at,
-            reporter=defang(parsed.reporter_display_name or parsed.reporter_address) or "Necunoscut",
+            reporter=defang(parsed.reporter_display_name or parsed.reporter_address)
+            or "Necunoscut",
             subject=defang(parsed.subject) or "(Fără subiect)",
             from_address=defang(parsed.from_address) or "Necunoscut",
             report_kind=str(parsed.report_kind),
@@ -131,7 +130,9 @@ def ingest_bytes(
         )
 
 
-def ingest_file(path: Path, *, llm_client: Any = None, settings: Settings | None = None) -> Report | None:
+def ingest_file(
+    path: Path, *, llm_client: Any = None, settings: Settings | None = None
+) -> Report | None:
     return ingest_bytes(
         path.read_bytes(),
         source="corpus",

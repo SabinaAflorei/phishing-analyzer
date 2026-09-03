@@ -150,6 +150,7 @@ STATIC_TEMPLATES: dict[str, str] = {
 
 CLOSING = "Cu stimă,"
 
+
 def split_email(text: str) -> tuple[str, str, str]:
     """Împarte răspunsul în (salut, corp, încheiere).
 

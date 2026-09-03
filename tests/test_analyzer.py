@@ -244,7 +244,10 @@ def test_arhiva_protejata_cu_parola_e_semnalata() -> None:
 def test_mail_intern_prin_infra_proprie_nu_e_malicios() -> None:
     """Cel mai grav fals pozitiv de dinainte: domeniile proprii semanau intre
     ele, deci lookalike marca orice mail intern ca malitios."""
-    for addr, host in (("ceo@exemplu.com", "mx01.exemplu.com"), ("hr@exemplu.ro", "mail1.exemplu.ro")):
+    for addr, host in (
+        ("ceo@exemplu.com", "mx01.exemplu.com"),
+        ("hr@exemplu.ro", "mail1.exemplu.ro"),
+    ):
         parsed = ParsedEmail(
             report_kind=ReportKind.UNKNOWN,
             from_address=addr,

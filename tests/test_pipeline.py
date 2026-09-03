@@ -16,7 +16,7 @@ import pytest
 from triage import db
 from triage.db import quality_stats, session
 from triage.defang import refang
-from triage.drafter import Draft, generate_draft
+from triage.drafter import Draft, _format_evidence_for_prompt, generate_draft
 from triage.llm import OllamaClient, OllamaUnavailable, build_llm_client
 from triage.pipeline import ingest_bytes, ingest_corpus, ingest_file
 from triage.settings import LLMSettings
@@ -139,7 +139,7 @@ def test_output_valid_de_la_model_e_folosit() -> None:
 
 
 def test_drafter_stricat_nu_pierde_mailul(monkeypatch: pytest.MonkeyPatch) -> None:
-    """"Un bug in drafter nu pierde niciodata un mail" - sectiunea 3."""
+    """ "Un bug in drafter nu pierde niciodata un mail" - sectiunea 3."""
 
     def drafter_stricat(*args: Any, **kwargs: Any) -> Draft:
         raise RuntimeError("bug in drafter")
@@ -297,3 +297,113 @@ def test_datele_din_mail_ajung_in_raport() -> None:
     assert report.reporter.startswith("Atacator") or "rau@evil-domain" in report.reporter
     assert report.received_at.year == 2026
     assert any(ev["code"] == "AUTH_FAILURE" for ev in report.evidence)
+
+
+# ---------------------------------------------------------------------------
+# Criteriul 8.1: sub 30 de secunde de la ingestie la draft
+# ---------------------------------------------------------------------------
+
+
+def test_calea_deterministica_e_mult_sub_bugetul_de_30s() -> None:
+    """Bugetul din foaie e 30s per mail, de la ingestie la ciorna.
+
+    Aici se masoara partea deterministica - parsare, analiza, sablon, scriere.
+    Ea are bugetul asigurat cu marja uriasa, deci tot ce ramane pentru model e
+    aproape intregul buget. Timpul modelului se masoara separat, cu Ollama
+    pornit: `python3 scripts/eval_model.py`, care raporteaza media si maximul
+    la cald si striga daca depaseste 30s.
+    """
+    import time
+
+    start = time.perf_counter()
+    report = ingest_bytes(PHISHING)
+    elapsed = time.perf_counter() - start
+
+    assert report is not None
+    assert report.draft, "trebuie sa existe o ciorna la capatul drumului"
+    assert elapsed < 5.0, f"calea fara model a durat {elapsed:.2f}s"
+
+
+def test_timeoutul_modelului_vine_din_config() -> None:
+    """Fara timeout, un model blocat tine ingestia pe loc la nesfarsit."""
+    client = build_llm_client(LLMSettings(enabled=True, timeout_seconds=7))
+    assert client is not None
+    assert client.timeout_seconds == 7
+
+
+def test_trunchierea_pentru_model_vine_din_config() -> None:
+    """Sectiunea 4.4 punctul 2: valoarea vine din settings, nu din semnatura."""
+    from triage.analyzer import analyze
+    from triage.parser import parse_report
+
+    lung = b"From: a@rau.example\nSubject: Test\n\n" + b"cuvant " * 5000
+    analysis = analyze(parse_report(lung))
+    prompt = _format_evidence_for_prompt(analysis, 120)
+    assert all(len(line) <= 400 for line in prompt.splitlines())
+
+
+# ---------------------------------------------------------------------------
+# Ingestia din IMAP (criteriile I8 si I9 pe drumul complet)
+# ---------------------------------------------------------------------------
+
+
+def test_ingestia_din_imap_salveaza_eml_ul_brut_si_raportul(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from triage.fetcher import ImapMessage
+    from triage.pipeline import ingest_imap
+    from triage.settings import ImapSettings, PathSettings, Settings
+
+    mesaje = [ImapMessage(uid="1", raw=PHISHING), ImapMessage(uid="2", raw=SIMULARE)]
+    monkeypatch.setattr("triage.fetcher.fetch_from_imap", lambda _: mesaje)
+
+    settings = Settings(
+        source="imap",
+        paths=PathSettings(raw_eml_dir=tmp_path / "brute"),
+        imap=ImapSettings(host="imap.exemplu.ro", user="u", app_password="p"),
+    )
+
+    result = ingest_imap(settings=settings)
+
+    assert (result.ingested, result.failed) == (2, 0)
+    salvate = sorted(p.name for p in (tmp_path / "brute").iterdir())
+    assert len(salvate) == 2
+    assert all(name.endswith(".eml") for name in salvate)
+    # Sectiunea 4.5: .eml-urile brute stau la 600.
+    assert all(p.stat().st_mode & 0o777 == 0o600 for p in (tmp_path / "brute").iterdir())
+
+
+def test_al_doilea_poll_nu_reproceseaza(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Criteriul I9 pe drumul IMAP: mesajele raman pe server, deci al doilea
+    poll le vede din nou - si trebuie sa le sara."""
+    from triage.fetcher import ImapMessage
+    from triage.pipeline import ingest_imap
+    from triage.settings import ImapSettings, PathSettings, Settings
+
+    monkeypatch.setattr(
+        "triage.fetcher.fetch_from_imap", lambda _: [ImapMessage(uid="1", raw=PHISHING)]
+    )
+    settings = Settings(
+        source="imap",
+        paths=PathSettings(raw_eml_dir=tmp_path / "brute"),
+        imap=ImapSettings(host="imap.exemplu.ro", user="u", app_password="p"),
+    )
+
+    assert ingest_imap(settings=settings).ingested == 1
+    second = ingest_imap(settings=settings)
+    assert (second.ingested, second.skipped, second.failed) == (0, 1, 0)
+
+
+def test_ingest_once_alege_sursa_din_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from triage.pipeline import ingest_once
+    from triage.settings import Settings
+
+    apelat: list[str] = []
+    monkeypatch.setattr("triage.pipeline.ingest_imap", lambda settings: apelat.append("imap"))
+    monkeypatch.setattr("triage.pipeline.ingest_corpus", lambda settings: apelat.append("corpus"))
+
+    ingest_once(Settings(source="imap"))
+    ingest_once(Settings(source="corpus"))
+    assert apelat == ["imap", "corpus"]

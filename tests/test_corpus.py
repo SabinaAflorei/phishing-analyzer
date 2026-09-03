@@ -135,7 +135,9 @@ def test_dovezile_obligatorii_sunt_prezente(case: str) -> None:
 def test_dovezile_folosesc_vocabularul_definit(case: str) -> None:
     """Un cod fara pondere ar conta zero in tacere, adica ar fi cod mort."""
     produced = {ev.code for ev in _analyze(case).evidence}
-    assert produced <= set(SIGNAL_WEIGHT), f"{case}: coduri necunoscute {produced - set(SIGNAL_WEIGHT)}"
+    assert produced <= set(SIGNAL_WEIGHT), (
+        f"{case}: coduri necunoscute {produced - set(SIGNAL_WEIGHT)}"
+    )
 
 
 @_no_corpus

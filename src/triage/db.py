@@ -105,6 +105,24 @@ _session_factory: sessionmaker[Session] | None = None
 _engine: Engine | None = None
 
 
+# Sectiunea 4.5: directorul cu date sensibile nu intra in backup-urile automate.
+# CACHEDIR.TAG e un standard pe care il respecta borg, restic, bacula si
+# `tar --exclude-caches`. E cea mai ieftina protectie care functioneaza fara sa
+# ceara nimanui sa isi aduca aminte sa configureze o excludere.
+CACHEDIR_TAG = (
+    "Signature: 8a477f597d28d172789f06886806bc55\n"
+    "# Director cu raportari reale: .eml brute si baza de date.\n"
+    "# Exclus din backup-urile automate - vezi sectiunea 4.5.\n"
+)
+
+
+def mark_excluded_from_backups(directory: Path) -> None:
+    tag = directory / "CACHEDIR.TAG"
+    if not tag.exists():
+        directory.mkdir(parents=True, exist_ok=True)
+        tag.write_text(CACHEDIR_TAG, encoding="utf-8")
+
+
 def make_engine(db_path: Path | str) -> Engine:
     """Motor SQLite pe un fisier, cu permisiuni restrictive.
 
@@ -115,6 +133,7 @@ def make_engine(db_path: Path | str) -> Engine:
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     os.chmod(path.parent, 0o700)  # noqa: PTH101 - avem deja Path, chmod e explicit
+    mark_excluded_from_backups(path.parent.parent)
 
     engine = create_engine(f"sqlite:///{path}", future=True)
     Base.metadata.create_all(engine)
@@ -155,9 +174,7 @@ def already_ingested(s: Session, eml_sha256: str, message_id: str = "") -> bool:
     """Idempotenta la repornire si la re-poll (criteriile 8.3 si I9)."""
     if s.scalar(select(Report.id).where(Report.eml_sha256 == eml_sha256)):
         return True
-    return bool(
-        message_id and s.scalar(select(Report.id).where(Report.message_id == message_id))
-    )
+    return bool(message_id and s.scalar(select(Report.id).where(Report.message_id == message_id)))
 
 
 def save_report(s: Session, **fields: Any) -> Report | None:
@@ -178,9 +195,7 @@ def list_reports(
     if status:
         query = query.where(Report.status == status)
     if verdict:
-        query = query.where(
-            func.coalesce(Report.verdict_override, Report.verdict) == verdict
-        )
+        query = query.where(func.coalesce(Report.verdict_override, Report.verdict) == verdict)
     return list(s.scalars(query))
 
 

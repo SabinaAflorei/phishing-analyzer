@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from triage.db import mark_excluded_from_backups
 from triage.settings import ImapSettings
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ def save_raw_eml(content: bytes, destination_path: Path) -> Path:
     """Salveaza .eml-ul brut cu permisiuni restrictive (sectiunea 4.5)."""
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     os.chmod(destination_path.parent, 0o700)  # noqa: PTH101 - chmod explicit pe Path existent
+    mark_excluded_from_backups(destination_path.parent.parent)
 
     fd = os.open(destination_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "wb") as f:
@@ -103,9 +105,7 @@ def fetch_from_imap(
             return _fetch_once(imap, opener)
         except (imaplib.IMAP4.error, OSError, EOFError) as err:
             last_error = err
-            logger.warning(
-                "Mailbox indisponibil (incercarea %d/%d): %s", attempt, retries, err
-            )
+            logger.warning("Mailbox indisponibil (incercarea %d/%d): %s", attempt, retries, err)
             if attempt < retries:
                 sleep(backoff_seconds * (2 ** (attempt - 1)))
 

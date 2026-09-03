@@ -1,4 +1,4 @@
-.PHONY: help venv install run test lint typecheck ci fmt clean status
+.PHONY: help venv install setup corpus ingest poll run test lint typecheck ci fmt clean status
 
 VENV := .venv
 PY   := $(VENV)/bin/python
@@ -10,6 +10,21 @@ help:
 install: ## Instaleaza dependintele in venv
 	$(PIP) install -r requirements-dev.txt
 	$(PIP) install -e .
+
+setup: install ## Instalare + fisierele de configurare, pornind de la exemple
+	@test -f config/settings.yaml || cp config/settings.example.yaml config/settings.yaml
+	@test -f config/company_domains.yaml || cp config/company_domains.example.yaml config/company_domains.yaml
+	@test -f .env || cp .env.example .env
+	@echo "Editeaza config/company_domains.yaml cu domeniile reale."
+
+corpus: ## Genereaza corpusul SINTETIC (doar daca nu ai corpusul real)
+	$(PY) scripts/make_synthetic_corpus.py
+
+ingest: ## Un ciclu de ingestie din sursa configurata
+	$(VENV)/bin/triage ingest
+
+poll: ## Ingestie la interval, pana la Ctrl+C
+	$(VENV)/bin/triage poll
 
 run: ## Porneste dashboard-ul pe 127.0.0.1:8000
 	$(VENV)/bin/uvicorn triage.dashboard.app:app --host 127.0.0.1 --port 8000 --reload
