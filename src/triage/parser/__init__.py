@@ -38,6 +38,9 @@ class ParsedEmail:
     from_address: str = ""
     reply_to: str = ""
     return_path: str = ""
+    message_id: str = ""
+    in_reply_to: str = ""
+    references: str = ""
     auth_results: str = ""
     received_chain: list[str] = field(default_factory=list)
     body_text: str = ""
@@ -144,6 +147,24 @@ def decode_mime_header(header_value: str | None) -> str:
     text = re.sub(r"\s+=\s+", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
+_FWD_HEADER_BLOCK_RE = re.compile(
+    r"(?:From|De la)\s*:\s*(?P<from>.+?)\n"
+    r"(?:Sent|Trimis|Date|Data)\s*:\s*.+?\n"
+    r"(?:To|Către|Catre)\s*:\s*.+?\n"
+    r"(?:Subject|Subiect)\s*:\s*(?P<subject>.+?)\n",
+    re.IGNORECASE,
+)
+def extract_forwarded_headers(body_text: str) -> dict[str, str]:
+    """Extrage blocul de headere inline dintr-un forward. Best-effort:
+    e text scris de client de mail, nu structurat ca un Message."""
+    match = _FWD_HEADER_BLOCK_RE.search(body_text)
+    if not match:
+        return {}
+    return {
+        "from": match.group("from").strip(),
+        "subject": match.group("subject").strip(),
+    }
+
 def detect_report_kind(raw: bytes) -> ReportKind:
     msg = message_from_bytes(raw)
     has_image = False
@@ -167,7 +188,6 @@ def detect_report_kind(raw: bytes) -> ReportKind:
         return ReportKind.FORWARD_INLINE
     return ReportKind.UNKNOWN
 
-
 def parse_report(raw: bytes) -> ParsedEmail:
     msg = message_from_bytes(raw)
     kind = detect_report_kind(raw)
@@ -178,7 +198,6 @@ def parse_report(raw: bytes) -> ParsedEmail:
             filename = (part.get_filename() or "").lower()
             if content_type == "message/rfc822" or filename.endswith(".eml"):
                 payload = part.get_payload()
-
                 if isinstance(payload, list) and payload:
                     first_item = payload[0]
                     if isinstance(first_item, Message):
@@ -198,65 +217,75 @@ def parse_report(raw: bytes) -> ParsedEmail:
     reply_to = msg.get("Reply-To", "")
     return_path = msg.get("Return-Path", "")
     auth_results = msg.get("Authentication-Results", "")
+    message_id = msg.get("Message-ID", "")
+    in_reply_to = msg.get("In-Reply-To", "")
+    references = msg.get("References", "")
     received_chain = msg.get_all("Received", [])
 
     body_text_parts = []
     urls = set()
     attachments = []
-
     url_pattern = re.compile(r"https?://[^\s<>\"']+")
 
     for part in msg.walk():
-        if part.is_multipart():
-            continue
-
-        content_type = part.get_content_type()
-        disposition = str(part.get("Content-Disposition", ""))
-
-        if "attachment" in disposition or part.get_filename():
-            payload = part.get_payload(decode=True)
-            if isinstance(payload, bytes):
-                filename = part.get_filename() or "unnamed"
-                sha256 = hashlib.sha256(payload).hexdigest()
-                size = len(payload)
-                attachments.append(
-                    ParsedAttachment(
-                        filename=filename,
-                        sha256=sha256,
-                        mime_type=content_type,
-                        size=size,
+            if part.is_multipart():
+                continue
+    
+            content_type = part.get_content_type()
+            disposition = str(part.get("Content-Disposition", ""))
+    
+            if "attachment" in disposition or part.get_filename():
+                payload = part.get_payload(decode=True)
+                if isinstance(payload, bytes):
+                    filename = part.get_filename() or "unnamed"
+                    sha256 = hashlib.sha256(payload).hexdigest()
+                    size = len(payload)
+                    attachments.append(
+                        ParsedAttachment(
+                            filename=filename,
+                            sha256=sha256,
+                            mime_type=content_type,
+                            size=size,
+                        )
                     )
-                )
-            continue
-
-        if content_type == "text/plain":
-            text = _decode_part_payload(part)
-            text = _clean_body_text(text)
-            if text:
-                body_text_parts.append(text)
-                for match in url_pattern.findall(text):
+                continue
+    
+            if content_type == "text/plain":
+                text = _decode_part_payload(part)
+                text = _clean_body_text(text)
+                if text:
+                    body_text_parts.append(text)
+                    for match in url_pattern.findall(text):
+                        urls.add(match)
+    
+            elif content_type == "text/html":
+                html_content = _decode_part_payload(part)
+                soup = BeautifulSoup(html_content, "html.parser")
+    
+                if not body_text_parts:
+                    for element in soup(["script", "style"]):
+                        element.decompose()
+                    extracted_text = _clean_body_text(
+                        soup.get_text(separator="\n")
+                    )
+                    if extracted_text:
+                        body_text_parts.append(extracted_text)
+    
+                for a_tag in soup.find_all("a", href=True):
+                    urls.add(a_tag["href"])
+    
+                for match in url_pattern.findall(html_content):
                     urls.add(match)
-
-        elif content_type == "text/html":
-            html_content = _decode_part_payload(part)
-            soup = BeautifulSoup(html_content, "html.parser")
-
-            if not body_text_parts:
-                for element in soup(["script", "style"]):
-                    element.decompose()
-                extracted_text = _clean_body_text(
-                    soup.get_text(separator="\n")
-                )
-                if extracted_text:
-                    body_text_parts.append(extracted_text)
-
-            for a_tag in soup.find_all("a", href=True):
-                urls.add(a_tag["href"])
-
-            for match in url_pattern.findall(html_content):
-                urls.add(match)
+        
 
     full_body = "\n\n".join(body_text_parts).strip()
+
+    if kind == ReportKind.FORWARD_INLINE:
+        fwd_headers = extract_forwarded_headers(full_body)
+        if fwd_headers.get("from"):
+            from_address = fwd_headers["from"]
+        if fwd_headers.get("subject"):
+            subject = fwd_headers["subject"]
 
     return ParsedEmail(
         report_kind=kind,
@@ -265,6 +294,9 @@ def parse_report(raw: bytes) -> ParsedEmail:
         reply_to=reply_to,
         return_path=return_path,
         auth_results=auth_results,
+        message_id=message_id,
+        in_reply_to=in_reply_to,
+        references=references,
         received_chain=received_chain,
         body_text=full_body,
         urls=list(urls),
