@@ -46,7 +46,9 @@ def load_real_reports() -> list[dict[str, Any]]:
             analysis_result = analyze(parsed_mail)
             defanged_urls = [defang(url) for url in parsed_mail.urls]
 
-            reporter_name = parsed_mail.from_address.split("<")[0].strip() or "Coleg"
+            reporter_name = (
+                parsed_mail.reporter_display_name or parsed_mail.reporter_address or "Coleg"
+            )
             draft_text = build_draft(analysis=analysis_result, reporter_name=reporter_name)
             evidence_list = [
                 

@@ -30,7 +30,9 @@ def process_eml(file_path: Path, output_json: bool = False) -> int:
     defanged_urls = [defang(url) for url in parsed_mail.urls]
 
     # 4. Generare Draft
-    reporter_name = parsed_mail.from_address.split("<")[0].strip() or "Coleg"
+    # Draftul i se adreseaza colegului care a raportat, nu expeditorului
+    # original - la un forward, ala e chiar atacatorul.
+    reporter_name = parsed_mail.reporter_display_name or parsed_mail.reporter_address or "Coleg"
     draft_text = build_draft(
         analysis=analysis_result,
         reporter_name=reporter_name,
