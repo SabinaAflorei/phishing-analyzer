@@ -143,13 +143,35 @@ def ingest_file(
     )
 
 
+def _llm_for_run(cfg: Settings) -> Any:
+    """Clientul, dar numai daca Ollama chiar raspunde.
+
+    Fara proba asta, fiecare mail din coada isi scria propriul avertisment ca
+    modelul nu a raspuns. Douasprezece randuri de WARNING la prima rulare arata
+    a sistem stricat, cand de fapt e comportamentul documentat: fara Ollama, se
+    folosesc sabloanele statice. O proba, un rand de log.
+    """
+    client = build_llm_client(cfg.llm)
+    if client is None:
+        return None
+    if not client.available():
+        logger.info(
+            "Ollama nu raspunde la %s sau nu are modelul %s. "
+            "Ciornele vor folosi sabloanele statice.",
+            cfg.llm.base_url,
+            cfg.llm.model,
+        )
+        return None
+    return client
+
+
 def ingest_corpus(
     corpus_dir: Path | None = None, *, settings: Settings | None = None
 ) -> IngestResult:
     """Toate .eml-urile din corpus. Rulabila de oricate ori: nu duplica nimic."""
     cfg = settings if settings is not None else get_settings()
     directory = corpus_dir if corpus_dir is not None else default_corpus_dir()
-    llm_client = build_llm_client(cfg.llm)
+    llm_client = _llm_for_run(cfg)
     result = IngestResult()
 
     for path in fetch_from_corpus(directory):
@@ -174,7 +196,7 @@ def ingest_imap(*, settings: Settings | None = None) -> IngestResult:
     from triage.fetcher import fetch_from_imap  # import tarziu: imaplib e greu
 
     cfg = settings if settings is not None else get_settings()
-    llm_client = build_llm_client(cfg.llm)
+    llm_client = _llm_for_run(cfg)
     result = IngestResult()
 
     for message in fetch_from_imap(cfg.imap):

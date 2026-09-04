@@ -11,44 +11,67 @@ Modelul doar îmbracă în text dovezile pe care analizorul le-a găsit deja.
 
 ---
 
-## Pornire în 10 minute
+## Pornire
 
-Ai nevoie de Python 3.12 sau mai nou. Ollama e opțional — fără el, sistemul
-folosește șabloanele statice și merge la fel.
-
-```bash
-git clone <repo> && cd phishing-analyzer
-
-python3 -m venv .venv
-make install                  # dependințe + pachetul, editabil
-
-cp config/settings.example.yaml config/settings.yaml
-cp config/company_domains.example.yaml config/company_domains.yaml
-cp .env.example .env          # doar credențiale IMAP; lasă-le goale deocamdată
-```
-
-Editează `config/company_domains.yaml` cu domeniile reale ale companiei.
-Fișierul nu intră în git — conține numele serverelor interne. Dacă îl uiți,
-sistemul cade pe varianta `.example` și scrie un avertisment în log, ca să nu
-descoperi peste două săptămâni că jumătate din reguli erau inerte.
-
-Îți trebuie corpus de test. Dacă nu ai încă cel real:
+Ai nevoie doar de **Python 3.12 sau mai nou**. Ollama e opțional — fără el
+sistemul folosește șabloanele statice și merge la fel.
 
 ```bash
-python3 scripts/make_synthetic_corpus.py    # 12 cazuri sintetice în corpus/eml/
+git clone https://github.com/czky/phishing-analyzer.git
+cd phishing-analyzer
+
+make setup      # creează .venv, instalează tot, copiază fișierele de configurare
+make corpus     # 12 cazuri sintetice de test — sari peste dacă ai corpusul real
+make ingest     # procesează corpusul și umple coada
+make run        # dashboard pe http://127.0.0.1:8000
 ```
 
-Apoi:
+Patru comenzi. Deschide `http://127.0.0.1:8000` — ar trebui să vezi 12 raportări
+cu verdicte. Oprești serverul cu `Ctrl+C`.
+
+Dacă vrei să verifici că totul e în regulă înainte:
 
 ```bash
-make test                     # 337 de teste, rețeaua blocată
-.venv/bin/triage ingest       # umple coada din corpus
-make run                      # dashboard pe http://127.0.0.1:8000
+make test       # 359 de teste, rețeaua blocată
 ```
 
-Deschide `http://127.0.0.1:8000`. Ar trebui să vezi 12 raportări cu verdicte.
+### Ce face `make setup`
+
+Creează `.venv`, instalează dependințele și pachetul, apoi copiază cele trei
+fișiere de configurare din variantele `.example`:
+
+| Fișier | La ce e | Trebuie editat? |
+|---|---|---|
+| `config/settings.yaml` | sursă, căi, LLM, dashboard | nu, merge așa |
+| `config/company_domains.yaml` | domeniile companiei, partenerii de încredere | **da**, vezi mai jos |
+| `.env` | doar credențiale IMAP | nu încă — vezi „Mailbox real” |
+
+Niciunul nu intră în git.
+
+### Singurul fișier pe care chiar trebuie să îl editezi
+
+`config/company_domains.yaml` — pune acolo domeniile reale ale companiei,
+hostname-urile serverelor de mail și adresa la care raportează angajații. De
+ele depind patru reguli: spoofing de domeniu intern, lookalike, TLD cu risc
+ridicat, și recunoașterea învelișului de raportare.
+
+Dacă îl lași necompletat sistemul pornește oricum, cade pe varianta `.example`
+și scrie un avertisment în log — ca să nu descoperi peste două săptămâni că
+jumătate din reguli mergeau pe date de exemplu.
+
+### Corpusul de test
+
+`make corpus` generează 12 cazuri **sintetice**, cu date inventate. Sunt acolo
+ca sistemul să aibă pe ce rula pe orice mașină.
+
+Dacă ai corpusul real, copiază-l în `corpus/eml/` (fișierele au aceleași nume),
+rulează `./scripts/fix_perms.sh` și sari peste `make corpus`. Diferența contează
+— vezi `docs/decisions/0008-corpus-sintetic.md`.
 
 ### Ollama, dacă îl vrei
+
+Nu e nevoie de el ca să pornești. Fără Ollama, ciornele vin din șabloanele
+statice, iar la ingestie apare o singură linie de log care spune asta.
 
 ```bash
 ollama pull qwen2.5:7b-instruct
@@ -56,23 +79,49 @@ python3 scripts/eval_model.py --models qwen2.5:7b-instruct,llama3.1:8b --runs 3
 ```
 
 Scriptul rulează aceleași cazuri de N ori și verifică automat structura,
-diacriticele, lungimea și constrângerile per categorie. **Rezultatele se scriu
-mai jos, la „Modelul ales”.** Modelul se pune în `config/settings.yaml`, la
-`llm.model`. Ca să oprești complet LLM-ul: `llm.enabled: false`.
+diacriticele, lungimea și constrângerile per categorie. Modelul ales se pune în
+`config/settings.yaml`, la `llm.model`. Ca să oprești complet LLM-ul:
+`llm.enabled: false`.
+
+### Mailbox real (IMAP)
+
+**Nu înainte de discuția cu mentorul** (secțiunea 10). Când e cazul, completezi
+credențialele în `.env`, pui `source: imap` în `config/settings.yaml`, și
+pornești `make poll`. Conexiunea e read-only: nu șterge, nu mută și nu marchează
+nimic.
 
 ---
 
 ## Ce face fiecare comandă
 
+Din `make`:
+
+| Comandă | Ce face |
+|---|---|
+| `make setup` | venv + dependințe + fișiere de configurare |
+| `make corpus` | generează corpusul sintetic de test |
+| `make ingest` | un ciclu de ingestie din sursa configurată |
+| `make poll` | ingestie la interval, până la `Ctrl+C` |
+| `make run` | dashboard pe `127.0.0.1:8000` |
+| `make test` | testele, cu rețeaua blocată |
+| `make ci` | ruff + mypy + teste — tot ce trebuie verde înainte de PR |
+| `make status` | panou de progres → `build/status.html` |
+| `make clean` | șterge cache-urile și `build/` |
+
+Direct din CLI (după `make setup`, binarul e în `.venv/bin/triage`):
+
 ```bash
-triage ingest                 # un ciclu de ingestie din sursa configurată
-triage poll --interval 300    # ingestie la interval, până la Ctrl+C
+triage ingest                 # un ciclu de ingestie
+triage poll --interval 300    # ingestie la interval
 triage list --status NEW      # ce e în coadă
+triage list --verdict SPAM    # filtrat pe verdict
 triage show 3                 # un raport, cu dovezi și ciornă
 triage check mail.eml         # analizează un .eml fără să îl salveze nicăieri
+triage check mail.eml --json  # același lucru, pentru scripting
 ```
 
-`check` e singura comandă care nu atinge baza de date.
+`check` e singura comandă care nu atinge baza de date. Toate acceptă `--json`
+unde are sens, și `-v` pentru log detaliat.
 
 ---
 

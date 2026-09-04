@@ -7,15 +7,22 @@ PIP  := $(VENV)/bin/pip
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-install: ## Instaleaza dependintele in venv
-	$(PIP) install -r requirements-dev.txt
-	$(PIP) install -e .
+venv: ## Creeaza .venv daca lipseste
+	@test -d $(VENV) || python3 -m venv $(VENV)
 
-setup: install ## Instalare + fisierele de configurare, pornind de la exemple
+install: venv ## Creeaza venv-ul si instaleaza dependintele
+	$(PIP) install -q -r requirements-dev.txt
+	$(PIP) install -q -e .
+
+setup: install ## Tot ce trebuie ca sa pornesti: venv, dependinte, configurare
 	@test -f config/settings.yaml || cp config/settings.example.yaml config/settings.yaml
 	@test -f config/company_domains.yaml || cp config/company_domains.example.yaml config/company_domains.yaml
 	@test -f .env || cp .env.example .env
-	@echo "Editeaza config/company_domains.yaml cu domeniile reale."
+	@echo
+	@echo "Gata. Urmatorul pas:"
+	@echo "  1. editeaza config/company_domains.yaml cu domeniile reale"
+	@echo "  2. make corpus     (doar daca nu ai corpusul real in corpus/eml/)"
+	@echo "  3. make ingest && make run"
 
 corpus: ## Genereaza corpusul SINTETIC (doar daca nu ai corpusul real)
 	$(PY) scripts/make_synthetic_corpus.py
