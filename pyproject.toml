@@ -8,6 +8,9 @@ version = "0.1.0"
 description = "Asistent local de triaj pentru mail-uri de phishing raportate"
 requires-python = ">=3.12"
 
+[project.scripts]
+triage = "triage.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

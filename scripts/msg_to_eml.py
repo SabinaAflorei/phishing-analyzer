@@ -256,7 +256,7 @@ def main() -> int:
             dst = args.outdir / (src.stem + ".eml")
         else:
             dst = src.with_suffix(".eml")
-            
+
         # Salvare securizată cu permisiuni 0o600
         save_secure_file(dst, raw)
         print(f"{src} -> {dst}  ({len(raw)} octeti)")

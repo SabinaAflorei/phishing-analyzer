@@ -6,7 +6,9 @@ from triage.verdicts import Analysis, Verdict
 
 
 def test_sanitize_for_model_basic() -> None:
-    raw_text = "<html><body>Salut<script>alert(1)</script><style>body {color: red;}</style></body></html>"
+    raw_text = (
+        "<html><body>Salut<script>alert(1)</script><style>body {color: red;}</style></body></html>"
+    )
     clean = sanitize_for_model(raw_text)
 
     # Verificare ca nu exista tag-uri HTML si nici continutul din <script> / <style>
@@ -18,7 +20,7 @@ def test_sanitize_for_model_basic() -> None:
 
 def test_sanitize_for_model_zero_width_chars() -> None:
     # Text ce contine caractere invizibile zero-width si Unicode direcționale (\uFEFF, \u200B, \u2060, \u2066)
-    raw_text = "Sa\uFEFFlut\u200B lume\u2060!\u2066"
+    raw_text = "Sa\ufefflut\u200b lume\u2060!\u2066"
     clean = sanitize_for_model(raw_text)
     assert clean == "Salut lume!"
 
@@ -73,7 +75,7 @@ def test_build_draft_legitimate() -> None:
 def test_build_draft_empty_reporter_name() -> None:
     analysis = Analysis(verdict=Verdict.MALICIOUS, confidence=0.9)
     draft = build_draft(analysis, "")
-    assert draft.startswith("Bună ziua,\n\n")  
+    assert draft.startswith("Bună ziua,\n\n")
 
 
 def test_static_templates_valid_email_structure() -> None:

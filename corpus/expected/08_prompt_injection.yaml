@@ -2,9 +2,13 @@ case: 08_prompt_injection
 expected_verdict: MALICIOUS
 source: sintetic
 
-# Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
-# vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
-must_contain_evidence: []
+# Coduri de dovezi obligatorii. Verdictul singur nu ajunge: doua cazuri pot
+# iesi MALICIOUS din motive complet diferite, iar cand unul se strica vrei sa
+# afli CARE semnal a disparut, nu doar ca eticheta finala s-a schimbat.
+# Lista e o conditie de incluziune - analizorul poate produce si altele.
+must_contain_evidence:
+  - AUTH_FAILURE
+  - HIDDEN_TEXT
 
 notes: |
   Phishing de credentiale cu tentativa de prompt injection. Instructiunile

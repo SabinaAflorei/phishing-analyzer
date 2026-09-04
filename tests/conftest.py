@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 from pytest_socket import enable_socket, socket_allow_hosts  # type: ignore[import-untyped]
 
+from triage import db
+
 CORPUS = Path(__file__).parent.parent / "corpus" / "eml"
 
 
@@ -25,3 +27,13 @@ def _allow_ollama_only_when_marked(request: pytest.FixtureRequest) -> None:
 @pytest.fixture
 def corpus_dir() -> Path:
     return CORPUS
+
+
+@pytest.fixture(autouse=True)
+def _temp_database(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Fiecare test primeste o baza de date proprie, in tmp.
+
+    Autouse ca nimeni sa nu scrie din greseala in data/db/triage.sqlite3 -
+    fisierul real, cu raportari reale.
+    """
+    db.use_database(tmp_path_factory.mktemp("db") / "test.sqlite3")
