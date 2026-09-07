@@ -14,7 +14,6 @@ import yaml
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Any
-from triage.drafter.llm_client import OllamaClient
 
 
 def _find_config_dir() -> Path:
@@ -102,7 +101,8 @@ def llm_enabled() -> bool:
     return get_settings().llm.enabled
 
 
-def get_ollama_client() -> OllamaClient:
+def get_ollama_client() -> Any:
+    from triage.drafter.llm_client import OllamaClient
     llm = get_settings().llm
     return OllamaClient(
         base_url=llm.base_url,
