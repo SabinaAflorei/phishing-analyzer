@@ -4,7 +4,7 @@ source: sintetic
 
 # Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
 # vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
-must_contain_evidence: []
+must_contain_evidence: [AUTH_FAILURE, REPLY_TO_MISMATCH, RETURN_PATH_MISMATCH]
 
 notes: |
   Spoofing de domeniu intern (fraudarea directorului general). From pretinde

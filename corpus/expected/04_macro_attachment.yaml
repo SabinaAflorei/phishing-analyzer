@@ -4,7 +4,7 @@ source: sintetic
 
 # Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
 # vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
-must_contain_evidence: []
+must_contain_evidence: [SUSPECT_ATTACHMENT, RETURN_PATH_MISMATCH]
 
 notes: |
   Atasament .docm (macro-enabled), cerere explicita de activare a

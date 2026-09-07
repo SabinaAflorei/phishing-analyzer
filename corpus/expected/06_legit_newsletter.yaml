@@ -4,7 +4,7 @@ source: corpus/msg/6.msg
 
 # Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
 # vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
-must_contain_evidence: []
+must_contain_evidence: [RETURN_PATH_MISMATCH, HIDDEN_CONTENT_DETECTED, LEGIT_NEWSLETTER]
 
 notes: |
   Newsletter comercial real de la un furnizor cunoscut (ctce.ro, JuristPRO),

@@ -4,7 +4,7 @@ source: corpus/msg/11.msg
 
 # Coduri de dovezi obligatorii. Le completezi pe masura ce definesti
 # vocabularul de semnale in analizor - un cod per semnal, stabil in timp.
-must_contain_evidence: []
+must_contain_evidence: [INSUFFICIENT_EVIDENCE]
 
 notes: |
   Ca 10, dar captura vine ca atasament propriu-zis (.png, nu inline) si
