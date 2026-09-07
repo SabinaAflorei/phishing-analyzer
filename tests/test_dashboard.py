@@ -3,7 +3,12 @@ from __future__ import annotations
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 from triage.dashboard.app import app
-from triage.dashboard.app import load_real_reports
+from fastapi.testclient import TestClient
+from triage.dashboard.app import app
+from triage.db import get_session, list_reports, init_db, get_report
+from triage.ingest import ingest_corpus
+from pathlib import Path
+
 
 client = TestClient(app)
 
@@ -24,33 +29,130 @@ MOCK_REPORTS = [
     }
 ]
 
+CORPUS_DIR= Path(__file__).resolve().parents[1] / "corpus" / "eml"
+def db_with_corpus(tmp_path: Path)-> None:
+    """ Initializeaza baza si ingerare corpus."""
+    db_path=tmp_path / "test.sqlite3"
+    init_db(db_path)
+    ingest_corpus(CORPUS_DIR)
 
 def test_healthz() -> None:
+    client= TestClient(app)
     response = client.get("/healthz")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_queue_page() -> None:
-    with patch("triage.dashboard.app.load_real_reports", return_value=MOCK_REPORTS):
-        response = client.get("/")
-        assert response.status_code == 200
-        assert "Test Phishing Subject" in response.text
+def test_queue_page(tmp_path:Path) -> None:
+    db_with_corpus(tmp_path)
+    client= TestClient(app)
+    response = client.get("/")
+    assert response.status_code == 200
+    session=get_session()
+    reports=list_reports(session)
+    session.close()
+    assert len(reports)>0
+    assert reports[0].subject in response.text or reports[0].file_name in response.text
 
 
-def test_report_detail_found() -> None:
-    with patch("triage.dashboard.app.load_real_reports", return_value=MOCK_REPORTS):
-        response = client.get("/report/1")
-        assert response.status_code == 200
-        assert "Test Phishing Subject" in response.text
+def test_report_detail_found(tmp_path: Path) -> None:
+    db_with_corpus(tmp_path)
+
+    session = get_session()
+    report_id = list_reports(session)[0].id
+    session.close()
+
+    client = TestClient(app)
+    response = client.get(f"/report/{report_id}")
+
+    assert response.status_code == 200
 
 
-def test_report_detail_not_found() -> None:
-    with patch("triage.dashboard.app.load_real_reports", return_value=MOCK_REPORTS):
-        response = client.get("/report/999")
-        assert response.status_code == 404
+def test_report_detail_not_found(tmp_path: Path) -> None:
+    db_with_corpus(tmp_path)
 
-def test_load_real_reports_execution() -> None:
-    # Ruleaza functia direct pentru a acoperi liniile de procesare corpus
-    reports = load_real_reports()
-    assert isinstance(reports, list)
+    client = TestClient(app)
+    response = client.get("/report/nu_exista_id")
+
+    assert response.status_code == 404
+
+
+def test_mark_sent_persists_status(tmp_path: Path) -> None:
+    db_with_corpus(tmp_path)
+
+    session = get_session()
+    report_id = list_reports(session)[0].id
+    session.close()
+
+    client = TestClient(app)
+    response = client.post(f"/report/{report_id}/action", data={"action": "mark_sent"})
+    assert response.status_code == 200
+
+    session = get_session()
+    row = get_report(session, report_id)
+    assert row is not None
+    assert row.status == "SENT"
+    session.close()
+
+
+def test_escalate_persists_status(tmp_path: Path) -> None:
+    db_with_corpus(tmp_path)
+
+    session = get_session()
+    report_id = list_reports(session)[0].id
+    session.close()
+
+    client = TestClient(app)
+    response = client.post(f"/report/{report_id}/action", data={"action": "escalate"})
+    assert response.status_code == 200
+
+    session = get_session()
+    row = get_report(session, report_id)
+    assert row is not None
+    assert row.status == "ESCALATED"
+    session.close()
+
+
+def test_verdict_override_persists_and_reflects_on_reload(tmp_path: Path) -> None:
+    db_with_corpus(tmp_path)
+
+    session = get_session()
+    report_id = list_reports(session)[0].id
+    session.close()
+
+    client = TestClient(app)
+    client.post(
+        f"/report/{report_id}/action",
+        data={"action": "override_verdict", "corrected_verdict": "LEGITIMATE"},
+    )
+
+    response = client.get(f"/report/{report_id}")
+    assert "LEGITIMATE" in response.text
+
+
+def test_bulk_action_updates_multiple_statuses(tmp_path: Path) -> None:
+    db_with_corpus(tmp_path)
+
+    session = get_session()
+    report_ids = [r.id for r in list_reports(session)[:2]]
+    session.close()
+
+    client = TestClient(app)
+    response = client.post(
+        "/bulk-action",
+        data={"selected_ids": report_ids, "bulk_status": "ESCALATED"},
+    )
+    assert response.status_code == 200
+
+    session = get_session()
+    for report_id in report_ids:
+        row = get_report(session, report_id)
+        assert row is not None
+        assert row.status == "ESCALATED"
+    session.close()
+
+
+def test_stats_page_loads() -> None:
+    client = TestClient(app)
+    response = client.get("/stats")
+    assert response.status_code == 200

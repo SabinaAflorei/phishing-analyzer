@@ -12,7 +12,7 @@ llm:
   model: llama3.1:8b     # punct de pornire, NU o decizie - vezi README
   temperature: 0.2
   max_input_chars: 2000   # trunchiere agresiva inainte de model
-  timeout_seconds: 30
+  timeout_seconds: 90
 
 enrichment:
   enabled: false          # offline-first: implicit oprit
