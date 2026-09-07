@@ -156,3 +156,24 @@ def test_stats_page_loads() -> None:
     client = TestClient(app)
     response = client.get("/stats")
     assert response.status_code == 200
+
+def test_stats_includes_verdict_distribution_and_corrections(tmp_path: Path) -> None:
+    db_with_corpus(tmp_path)
+
+    session = get_session()
+    report_id = list_reports(session)[0].id
+    original_verdict = list_reports(session)[0].verdict
+    session.close()
+
+    client = TestClient(app)
+    client.post(
+        f"/report/{report_id}/action",
+        data={"action": "override_verdict", "corrected_verdict": "LEGITIMATE"},
+    )
+
+    from triage.dashboard.feedback_store import get_feedback_stats
+    stats = get_feedback_stats()
+
+    assert "verdict_distribution" in stats
+    assert "corrections_by_category" in stats
+    assert original_verdict in stats["corrections_by_category"]    

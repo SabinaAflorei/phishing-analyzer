@@ -1,21 +1,49 @@
 {% extends "base.html" %}
-
 {% block title %}Statistici & Metrice Calitate{% endblock %}
-
 {% block content %}
-<p><a href="/">&larr; Inapoi la coada</a></p>
+<p><a href="/">← Inapoi la coada</a></p>
 <h2>Statistici Calitate Sistem</h2>
 
 <div style="display: flex; gap: 20px; margin-top: 20px;">
-  <div style="border: 1px solid #ccc; padding: 15px; border-radius: 5px;">
+  <div class="card">
     <h3>Acceptare Draft-uri (Tinta: >90%)</h3>
     <p style="font-size: 2em; font-weight: bold; color: green;">{{ stats.acceptance_rate }}%</p>
     <small>{{ stats.unchanged_drafts }} din {{ stats.total_processed }} trimise neschimbate</small>
   </div>
-  <div style="border: 1px solid #ccc; padding: 15px; border-radius: 5px;">
+  <div class="card">
     <h3>Corectii Verdict</h3>
     <p style="font-size: 2em; font-weight: bold;">{{ stats.overrides_count }}</p>
     <small>Verdicte modificate manual de analist</small>
   </div>
+</div>
+
+<div class="card" style="margin-top: 20px;">
+  <h3>Distribuție Verdicte</h3>
+  <table>
+    <tr><th>Verdict</th><th>Număr rapoarte</th></tr>
+    {% for verdict, count in stats.verdict_distribution.items() %}
+    <tr><td><span class="badge {{ verdict }}">{{ verdict }}</span></td><td>{{ count }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card" style="margin-top: 20px;">
+  <h3>Corecții pe Categorii</h3>
+  {% if stats.corrections_by_category %}
+  <table>
+    <tr><th>Verdict original</th><th>Corectat în</th><th>Număr</th></tr>
+    {% for original, targets in stats.corrections_by_category.items() %}
+      {% for new_verdict, count in targets.items() %}
+      <tr>
+        <td><span class="badge {{ original }}">{{ original }}</span></td>
+        <td><span class="badge {{ new_verdict }}">{{ new_verdict }}</span></td>
+        <td>{{ count }}</td>
+      </tr>
+      {% endfor %}
+    {% endfor %}
+  </table>
+  {% else %}
+  <p style="color: #718096;">Nicio corecție înregistrată încă.</p>
+  {% endif %}
 </div>
 {% endblock %}

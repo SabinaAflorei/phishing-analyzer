@@ -34,16 +34,39 @@ def save_draft_edit(report_id: str, original_draft: str, final_draft: str) -> No
 
 
 def get_feedback_stats() -> dict[str, Any]:
+    from triage.db import get_session, list_reports
+
     _ensure_storage()
     data = json.loads(FEEDBACK_FILE.read_text())
     edits = data.get("draft_edits", [])
     total_edits = len(edits)
     unchanged = sum(1 for e in edits if not e["is_modified"])
-    
     rate = (unchanged / total_edits * 100) if total_edits > 0 else 100.0
+
+    overrides = data.get("reports_override", {})
+
+    session = get_session()
+    all_reports = list_reports(session)
+    session.close()
+
+    verdict_distribution: dict[str, int] = {}
+    for r in all_reports:
+        verdict_distribution[r.verdict] = verdict_distribution.get(r.verdict, 0) + 1
+
+    corrections_by_category: dict[str, dict[str, int]] = {}
+    for report_id, new_verdict in overrides.items():
+        row = next((r for r in all_reports if r.id == report_id), None)
+        original = row.verdict if row else "NECUNOSCUT"
+        corrections_by_category.setdefault(original, {})
+        corrections_by_category[original][new_verdict] = (
+            corrections_by_category[original].get(new_verdict, 0) + 1
+        )
+
     return {
         "total_processed": total_edits,
         "unchanged_drafts": unchanged,
         "acceptance_rate": round(rate, 1),
-        "overrides_count": len(data.get("reports_override", {})),
+        "overrides_count": len(overrides),
+        "verdict_distribution": verdict_distribution,
+        "corrections_by_category": corrections_by_category,
     }
