@@ -38,9 +38,12 @@ Editează `config/company_domains.yaml` cu domeniile reale ale companiei
 ### 4. Pornește Ollama
 
 ```bash
-ollama pull llama3:8b   
+ollama pull qwen2.5:7b-instruct   
 ollama serve &
 ```
+Modelul a fost ales pe baza unei evaluări comparative — vezi
+[`docs/decisions/model-choice.md`](docs/decisions/model-choice.md) pentru
+detalii și alte modele testate.
 
 ### 5. Rulează testele
 

@@ -134,7 +134,7 @@ Semnale din foaie care lipsesc complet:
 - [x] **D5. Semnale de continut** (pondere mica, dar coroborante, zice foaia):
       urgenta artificiala, cereri de credentiale, discrepanta intre textul
       link-ului si href. Ultimul depinde de C3.
-- [] **D6. Coroborarea semnalelor.** Acum fiecare regula face `return` imediat ce
+- [x] **D6. Coroborarea semnalelor.** Acum fiecare regula face `return` imediat ce
       se potriveste, deci se opreste la prima. Foaia cere ca verdictul sa fie "o
       functie de dovezi" si ca semnalele de continut sa aiba "pondere mica, dar
       coroboranta" - ceea ce presupune sa le aduni, nu sa iesi la prima.
@@ -164,14 +164,14 @@ model, temperatura, timeout) vine din A2.
 
 - [x] E2. Timeout pe apelul catre Ollama, ca sa nu blocheze pipeline-ul.
       `timeout_seconds: 30` exista deja in settings, trebuie doar folosit.
-- [ ] E3. Trunchiere la `max_input_chars` (2000) inainte de model - sectiunea 4.4
+- [x] E3. Trunchiere la `max_input_chars` (2000) inainte de model - sectiunea 4.4
       punctul 2. `sanitize_for_model` are deja `max_chars=2000` ca default, dar
       valoarea trebuie sa vina din config, nu din semnatura functiei.
-- [ ] E4. Ruleaza `scripts/eval_model.py` pe cateva modele si **scrie rezultatul
+- [x] E4. Ruleaza `scripts/eval_model.py` pe cateva modele si **scrie rezultatul
       in README**. Foaia cere explicit sa testezi limba romana si zice ca
       `llama3.1:8b` e "punct de pornire, NU o decizie". Scriptul e deja scris si
       verifica diacritice, structura si lungime - trebuie doar rulat si decis.
-- [ ] E5. Test care demonstreaza fallback-ul: cu Ollama picat, sistemul continua
+- [x] E5. Test care demonstreaza fallback-ul: cu Ollama picat, sistemul continua
       si scoate template static (criteriu 8.3).
 
 ---
@@ -212,22 +212,22 @@ sa te uiti, si e "principala metrica de calitate" dupa foaie.
 Partea grea e facuta si testata: retea blocata in teste, defanging, bind pe
 127.0.0.1, permisiuni 600, escapare Jinja2. Ce a ramas:
 
-- [ ] **G1. Testul de prompt injection e `xfail`.**
+- [x] **G1. Testul de prompt injection e `xfail`.**
       `tests/test_prompt_injection.py` e inca `raise NotImplementedError` sub
       `@pytest.mark.xfail`. E criteriu de acceptanta la 8.2 si test obligatoriu la
       4.4 punctul 4. Vezi si TODO-ul din analyzer - regula actuala face exact
       invers decat cere cazul 08, deci intai repari regula, apoi scrii testul.
-- [ ] **G2. Curatarea textului ascuns inainte de model** (4.4 punctul 1).
+- [x] **G2. Curatarea textului ascuns inainte de model** (4.4 punctul 1).
       `sanitize_for_model` scoate deja tag-uri script/style si caractere
       invizibile. Mai lipseste: text cu culoare identica cu fundalul (alb pe alb)
       si `font-size:1px`. Alea sunt in atributele de stil, deci ai nevoie de
       HTML-ul pastrat separat - vezi C2.
-- [ ] **G3. Validarea output-ului de la model** (4.4 punctul 3) - `split_email`
+- [x] **G3. Validarea output-ului de la model** (4.4 punctul 3) - `split_email`
       face verificarea si exista fallback-ul. Se poate bifa dupa ce E1 e gata si
       chiar trece cineva prin ramura aia. Pana atunci nu e testat pe bune.
-- [ ] **G4. Snapshot al VM-ului inainte de prima ingestie reala** (4.5). Nu e cod,
+- [x] **G4. Snapshot al VM-ului inainte de prima ingestie reala** (4.5). Nu e cod,
       dar e pe lista si se uita usor.
-- [ ] **G5. Directorul cu .eml brute exclus din backup-uri automate** (4.5).
+- [x] **G5. Directorul cu .eml brute exclus din backup-uri automate** (4.5).
 - [ ] **G6. Modulul de imbogatire** (optional prin foaie, dar daca il faci):
       submisie privata implicit si curatarea token-ului per-destinatar din URL
       inainte de trimitere (4.6). Comutatorul e deja prevazut in settings.
