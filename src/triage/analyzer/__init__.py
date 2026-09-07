@@ -425,7 +425,12 @@ def analyze(parsed: ParsedEmail) -> Analysis:
     has_no_explicit_fail = (
         "spf=fail" not in auth_lower and "dkim=fail" not in auth_lower and "dmarc=fail" not in auth_lower
     )
-    has_partner_newsletter_markers = "newsletter" in subject_text.lower() or "informare" in subject_text.lower()
+    has_partner_newsletter_markers = (
+    "newsletter" in subject_text.lower()
+    or "informare" in subject_text.lower()
+    or "unsubscribe" in combined_text.lower()
+    or "dezabonare" in combined_text.lower()
+    )
     is_legit_newsletter = is_trusted_partner and has_no_explicit_fail and has_partner_newsletter_markers
 
     is_spam_report = parsed.report_kind == ReportKind.SPAM
