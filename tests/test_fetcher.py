@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from triage.fetcher import fetch_from_corpus, fetch_from_imap
+from triage.fetcher import fetch_from_corpus, fetch_from_imap, _connect_imap_with_retry
+from unittest.mock import MagicMock, patch
+import imaplib
+import pytest
 
 
 def test_fetch_from_corpus_non_existent(tmp_path: Path) -> None:
@@ -50,3 +53,46 @@ def test_fetch_from_corpus_ignores_non_eml(tmp_path: Path) -> None:
 
 def test_fetch_from_imap() -> None:
     assert fetch_from_imap() == []
+
+
+def test_imap_retry_succeeds_on_second_attempt() -> None:
+    """Prima incercare esueaza, a doua reuseste - fara sa piarda ceva."""
+    mock_mail = MagicMock()
+
+    call_count = {"n": 0}
+
+    def side_effect(*args, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise OSError("Connection refused")
+        return mock_mail
+
+    with patch("triage.fetcher.imaplib.IMAP4_SSL", side_effect=side_effect):
+        result = _connect_imap_with_retry(
+            server="localhost", port=993, user="u", password="p",
+            max_attempts=3, backoff_seconds=0.01,  # backoff mic, ca testul sa fie rapid
+        )
+
+    assert result is mock_mail
+    assert call_count["n"] == 2
+
+
+def test_imap_retry_exhausts_all_attempts_and_raises() -> None:
+    """Dupa max_attempts esecuri, ridica ultima eroare - nu se blocheaza silentios."""
+    with patch("triage.fetcher.imaplib.IMAP4_SSL", side_effect=OSError("Connection refused")):
+        with pytest.raises(OSError, match="Connection refused"):
+            _connect_imap_with_retry(
+                server="localhost", port=993, user="u", password="p",
+                max_attempts=3, backoff_seconds=0.01,
+            )
+
+
+def test_fetch_from_imap_no_credentials_returns_empty_without_retry() -> None:
+    """Fara credentiale, nu se incearca deloc conectarea - skip curat."""
+    from triage.fetcher import fetch_from_imap
+
+    with patch.dict("os.environ", {"TRIAGE_IMAP_USER": "", "TRIAGE_IMAP_PASSWORD": ""}, clear=False):
+        with patch("triage.fetcher.imaplib.IMAP4_SSL") as mock_imap:
+            result = fetch_from_imap()
+            mock_imap.assert_not_called()
+    assert result == []    

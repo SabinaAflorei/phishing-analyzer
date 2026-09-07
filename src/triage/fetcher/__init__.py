@@ -7,6 +7,8 @@ import logging
 import os
 from pathlib import Path
 from typing import Any
+import time
+import imaplib
 
 from triage.db import get_session, report_id_for, upsert_report
 from triage.secure_files import save_secure_file
@@ -45,13 +47,50 @@ def save_raw_eml(content: bytes, destination_path: Path) -> Path:
     save_secure_file(destination_path, content)
     return destination_path
 
+def _connect_imap_with_retry(
+    server: str, port: int, user: str, password: str,
+    max_attempts: int, backoff_seconds: float,
+) -> "imaplib.IMAP4_SSL":
+    """Conectare + login IMAP cu retry si backoff exponential.
+    Criteriul 8.3: mailbox indisponibil -> retry, fara pierdere de mesaje.
+    Nu se sterge/marcheaza nimic pana la o conexiune reusita, deci un
+    esec aici nu poate pierde mesaje - pur si simplu nu se proceseaza
+    nimic in acel ciclu de poll, si se reincearca la urmatorul."""
+    last_error: Exception | None = None
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            mail = imaplib.IMAP4_SSL(server, port)
+            mail.login(user, password)
+            if attempt > 1:
+                logger.info(
+                    "Conectare IMAP reusita la incercarea %d/%d.",
+                    attempt, max_attempts,
+                )
+            return mail
+        except (imaplib.IMAP4.error, OSError) as err:
+            last_error = err
+            if attempt < max_attempts:
+                wait = backoff_seconds * (2 ** (attempt - 1))
+                logger.warning(
+                    "Conectare IMAP esuata (incercarea %d/%d): %s. Reincerc in %.0fs.",
+                    attempt, max_attempts, err, wait,
+                )
+                time.sleep(wait)
+            else:
+                logger.error(
+                    "Conectare IMAP esuata definitiv dupa %d incercari: %s",
+                    max_attempts, err,
+                )
+
+    assert last_error is not None
+    raise last_error
 
 def fetch_from_imap() -> list[Path]:
-    """Poll read-only IMAP. 
-    Preia mesaje neprocesate, le salvează securizat, le introduce în DB 
+    """Poll read-only IMAP.
+    Preia mesaje neprocesate, le salvează securizat, le introduce în DB
     fără să le șteargă de pe server, asigurând idempotența.
     """
-    import imaplib
 
     settings = get_settings()
     downloaded_paths: list[Path] = []
@@ -67,8 +106,15 @@ def fetch_from_imap() -> list[Path]:
         return downloaded_paths
 
     try:
-        mail = imaplib.IMAP4_SSL(server, port)
-        mail.login(user, password)
+        mail = _connect_imap_with_retry(
+            server=server,
+            port=port,
+            user=user,
+            password=password,
+            max_attempts=settings.fetcher.imap_retry_attempts,
+            backoff_seconds=settings.fetcher.imap_retry_backoff_seconds,
+        )
+
         mail.select("INBOX", readonly=True)
 
         status, response = mail.search(None, "UNSEEN")
@@ -87,10 +133,10 @@ def fetch_from_imap() -> list[Path]:
                 for response_part in data:
                     if isinstance(response_part, tuple):
                         raw_bytes = response_part[1]
-                        
+
                         # Generare ID / Hash stabil pentru idempotență
                         report_id = report_id_for(raw_bytes)
-                        
+
                         # Salvare fișier .eml brut cu permisiuni restrictive (0o600)
                         filename = f"{report_id}.eml"
                         dest_path = storage_dir / filename

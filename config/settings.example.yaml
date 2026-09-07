@@ -22,3 +22,7 @@ enrichment:
 dashboard:
   host: 127.0.0.1         # niciodata 0.0.0.0
   port: 8000
+
+fetcher:
+  imap_retry_attempts: 3
+  imap_retry_backoff_seconds: 5    # se dubleaza la fiecare incercare: 5, 10, 20
