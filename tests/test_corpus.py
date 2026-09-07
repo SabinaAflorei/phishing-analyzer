@@ -22,6 +22,8 @@ import pytest
 import yaml
 
 from triage.verdicts import Verdict
+from triage.parser import parse_report
+from triage.analyzer import analyze
 
 CORPUS = Path(__file__).parent.parent / "corpus"
 EML_DIR = CORPUS / "eml"
@@ -75,22 +77,49 @@ def test_eml_se_parseaza(case: str) -> None:
     assert msg is not None
     list(msg.walk())  # structura MIME e traversabila cap-coada
 
-
-# TODO(lipseste testul cel mai important): niciun test nu compara verdictul REAL
-# cu expected_verdict din yaml.
-# Ce e gresit: fisierul asta verifica doar ca datele sunt intregi si ca yaml-urile
-# sunt valide - ceea ce e util, dar nu cheama niciodata analyze(). Ai 12 cazuri cu
-# verdict asteptat scris in corpus/expected/ si nefolosit de nimeni.
-# De ce conteaza: practic TOATE bug-urile marcate cu TODO in analyzer si parser ar
-# fi fost prinse de testul asta, in loc sa fie descoperite la review.
-# Cum rezolvi: un test parametrizat pe cazuri - citesti .eml, parse_report(),
-# analyze(), si compari result.verdict cu data["expected_verdict"]. Pune pe el
-# acelasi decorator @_no_corpus care exista deja mai jos, ca sa se sara pe masinile
-# fara corpus in loc sa pice. Verifica si must_contain_evidence cand incepi sa
-# completezi listele alea.
 @_no_corpus
 @pytest.mark.parametrize("case", _cases())
 def test_eml_e_privat(case: str) -> None:
     """Continut sensibil: 600, ca in sectiunea 4.5."""
     mode = (EML_DIR / f"{case}.eml").stat().st_mode & 0o777
     assert mode == 0o600, f"{case}.eml are permisiuni {mode:o}, se astepta 600"
+
+@_no_corpus
+@pytest.mark.parametrize("case", _cases())
+def test_verdict_corespunde_asteptarii(case: str) -> None:
+    """Criteriul de acceptanta 8.1: toate cazurile din corpus primesc
+    verdictul corect. Aici se verifica de fapt, nu doar se presupune."""
+    data = yaml.safe_load((EXPECTED_DIR / f"{case}.yaml").read_text(encoding="utf-8"))
+    expected_verdict = Verdict(data["expected_verdict"])
+
+    raw_bytes = (EML_DIR / f"{case}.eml").read_bytes()
+    parsed = parse_report(raw_bytes)
+    result = analyze(parsed)
+
+    assert result.verdict == expected_verdict, (
+        f"{case}: asteptat {expected_verdict}, obtinut {result.verdict}. "
+        f"Dovezi produse: {[e.code for e in result.evidence]}"
+    )
+
+
+@_no_corpus
+@pytest.mark.parametrize("case", _cases())
+def test_evidenta_contine_codurile_asteptate(case: str) -> None:
+    """Verifica nu doar verdictul, ci si MOTIVUL - un verdict corect din
+    dovezi gresite (coincidenta) trebuie sa pice aici, nu sa treaca tacut."""
+    data = yaml.safe_load((EXPECTED_DIR / f"{case}.yaml").read_text(encoding="utf-8"))
+    must_contain = data.get("must_contain_evidence", [])
+
+    if not must_contain:
+        pytest.skip(f"{case}: must_contain_evidence e gol, nimic de verificat")
+
+    raw_bytes = (EML_DIR / f"{case}.eml").read_bytes()
+    parsed = parse_report(raw_bytes)
+    result = analyze(parsed)
+    produced_codes = {e.code for e in result.evidence}
+
+    missing = set(must_contain) - produced_codes
+    assert not missing, (
+        f"{case}: lipsesc codurile {missing} din evidenta produsa. "
+        f"Prezente: {sorted(produced_codes)}"
+    )
