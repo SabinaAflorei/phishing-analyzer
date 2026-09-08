@@ -63,6 +63,9 @@ class DashboardSettings(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8000
 
+class FetcherSettings(BaseModel):
+    imap_retry_attempts: int = 3
+    imap_retry_backoff_seconds: float = 5.0
 
 class Settings(BaseSettings):
     """Radacina configului. BaseSettings permite si suprascriere prin
@@ -77,6 +80,7 @@ class Settings(BaseSettings):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     enrichment: EnrichmentSettings = Field(default_factory=EnrichmentSettings)
     dashboard: DashboardSettings = Field(default_factory=DashboardSettings)
+    fetcher: FetcherSettings = Field(default_factory=FetcherSettings)
 
 
 _settings: Settings | None = None
@@ -117,3 +121,4 @@ def get_db_path() -> Path:
 
 def get_raw_eml_dir() -> Path:
     return Path(get_settings().paths.raw_eml_dir)
+

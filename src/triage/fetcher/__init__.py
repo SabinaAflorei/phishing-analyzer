@@ -10,7 +10,6 @@ from email.message import Message
 from typing import List
 from triage.settings import get_settings
 import imaplib
-from triage.db import get_db_session, ProcessedEmail
 
 logger = logging.getLogger(__name__)
 
