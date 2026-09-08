@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 GENERIC_TERMS = {
     "scan", "serviciul", "service", "no-reply", "noreply",
     "support", "admin", "notification", "notifications", "info",
-    "helpdesk", "ticketing", "desk", "system", "securitate"
+    "helpdesk", "ticketing", "desk", "system", "securitate", "microsoft",
+    "digital", "juristpro", "contabilitate"
 }
 
 

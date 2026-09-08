@@ -14,8 +14,10 @@ import yaml
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Any
-from triage.drafter.llm_client import OllamaClient
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from triage.drafter.llm_client import OllamaClient
 
 def _find_config_dir() -> Path:
     current = Path(__file__).resolve().parent
@@ -107,6 +109,8 @@ def llm_enabled() -> bool:
 
 
 def get_ollama_client() -> OllamaClient:
+    from triage.drafter.llm_client import OllamaClient
+
     llm = get_settings().llm
     return OllamaClient(
         base_url=llm.base_url,

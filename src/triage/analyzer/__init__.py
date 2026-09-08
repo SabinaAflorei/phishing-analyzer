@@ -448,7 +448,7 @@ def analyze(parsed: ParsedEmail) -> Analysis:
     score = _evidence_score(evidence_list)
 
     if score >= _MALICIOUS_SCORE_THRESHOLD:
-        return Analysis(verdict=Verdict.MALICIOUS, confidence=min(0.99, 0.6 + score / 200), evidence=evidence_list)
+        return Analysis(verdict=Verdict.MALICIOUS, confidence=round(min(0.99, 0.6 + score / 200), 2), evidence=evidence_list)
 
     if is_legit_newsletter:
         evidence_list.append(
