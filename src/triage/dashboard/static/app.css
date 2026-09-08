@@ -594,3 +594,158 @@ code, .mono {
   .topbar, .filters, .split__aside, .btn { display: none; }
   .panel { box-shadow: none; break-inside: avoid; }
 }
+
+/* --------------------------------------------------------------------------
+ * Tema intunecata
+ *
+ * Doar token-uri. Nicio regula de layout nu se repeta aici, pentru ca restul
+ * fisierului nu contine culori scrise de mana - se uita toate la variabilele
+ * din :root. De asta tema incape in doua blocuri.
+ *
+ * Trei stari, in ordinea asta:
+ *   :root                       lumina, mai sus in fisier
+ *   prefers-color-scheme: dark  ce vrea sistemul, cand omul n-a ales explicit
+ *   [data-theme=...]            alegerea din buton, bate sistemul in ambele sensuri
+ *
+ * Lista de token-uri e scrisa de doua ori intentionat. Alternativa, light-dark(),
+ * ar fi tinut-o intr-un singur loc, dar pe un browser care n-o cunoaste pica
+ * TOATE culorile deodata, nu doar tema. Asa, un browser vechi ramane pe lumina
+ * si dashboard-ul arata normal.
+ *
+ * Perechile de verdict raman peste 4.5:1, verificate una cate una. Ca si la
+ * lumina, culoarea nu e singurul purtator de informatie - cuvantul verdictului
+ * sta intotdeauna langa ea.
+ * ------------------------------------------------------------------------ */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #0f1419;
+    --surface: #171e27;
+    --surface-2: #1e2632;
+    --surface-3: #263040;
+    --line: #2d3748;
+    --line-strong: #3d4a5c;
+
+    --text: #e6edf5;
+    --text-2: #a9b4c4;
+    --text-3: #8b95a5;
+
+    --accent: #6d8dff;
+    --accent-hover: #8aa4ff;
+    --accent-soft: #1a2440;
+    --accent-line: #33477d;
+
+    --danger: #f87171;
+    --danger-hover: #fca5a5;
+    --danger-soft: #3a1d1d;
+
+    --v-simulation-bg: #14321f;  --v-simulation-fg: #6ee7a0;
+    --v-malicious-bg: #3a1d1d;   --v-malicious-fg: #fca5a5;
+    --v-spam-bg: #3a2f10;        --v-spam-fg: #fcd34d;
+    --v-legitimate-bg: #1a2a47;  --v-legitimate-fg: #93b4fd;
+    --v-review-bg: #262d38;      --v-review-fg: #c3ccd9;
+
+    --sev-critical: #f87171;
+    --sev-high: #fbbf24;
+    --sev-medium: #fcd34d;
+    --sev-low: #86d97b;
+    --sev-info: #a9b4c4;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.35);
+    --shadow-raised: 0 2px 4px rgba(0, 0, 0, 0.45), 0 10px 24px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0f1419;
+  --surface: #171e27;
+  --surface-2: #1e2632;
+  --surface-3: #263040;
+  --line: #2d3748;
+  --line-strong: #3d4a5c;
+
+  --text: #e6edf5;
+  --text-2: #a9b4c4;
+  --text-3: #8b95a5;
+
+  --accent: #6d8dff;
+  --accent-hover: #8aa4ff;
+  --accent-soft: #1a2440;
+  --accent-line: #33477d;
+
+  --danger: #f87171;
+  --danger-hover: #fca5a5;
+  --danger-soft: #3a1d1d;
+
+  --v-simulation-bg: #14321f;  --v-simulation-fg: #6ee7a0;
+  --v-malicious-bg: #3a1d1d;   --v-malicious-fg: #fca5a5;
+  --v-spam-bg: #3a2f10;        --v-spam-fg: #fcd34d;
+  --v-legitimate-bg: #1a2a47;  --v-legitimate-fg: #93b4fd;
+  --v-review-bg: #262d38;      --v-review-fg: #c3ccd9;
+
+  --sev-critical: #f87171;
+  --sev-high: #fbbf24;
+  --sev-medium: #fcd34d;
+  --sev-low: #86d97b;
+  --sev-info: #a9b4c4;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-raised: 0 2px 4px rgba(0, 0, 0, 0.45), 0 10px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Butonul de tema */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: var(--fs-md);
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.theme-toggle:hover { background: var(--surface-2); color: var(--text); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.theme-toggle__icon::before { content: "\263E"; }          /* luna: comuta pe intuneric */
+:root[data-theme="dark"] .theme-toggle__icon::before { content: "\2600"; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle__icon::before { content: "\2600"; }
+}
+
+/* Bara de incredere din coada. Numarul ramane acolo - bara e in plus, nu in loc:
+ * la scanat o coada de cincizeci de randuri, lungimea se citeste mai repede
+ * decat doua zecimale. */
+.confidence {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.confidence__track {
+  flex: 1;
+  min-width: 2.5rem;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.confidence__fill { height: 100%; border-radius: 2px; }
+.confidence__fill--high { background: var(--sev-critical); }
+.confidence__fill--medium { background: var(--sev-high); }
+.confidence__fill--low { background: var(--sev-info); }
+.confidence__value { font-variant-numeric: tabular-nums; color: var(--text-2); }
+
+@media print { .theme-toggle { display: none; } }
