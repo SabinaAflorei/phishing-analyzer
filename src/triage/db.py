@@ -4,10 +4,10 @@ si actualizeaza status / verdict override / draft final."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
-from sqlalchemy import Column, DateTime, Float, String, Text, create_engine, select
+from sqlalchemy import DateTime, Float, String, Text, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import Any
@@ -35,11 +35,11 @@ class ReportRow(Base):
     attachments_json: Mapped[str] = mapped_column(Text, default="[]")
     headers_json: Mapped[str] = mapped_column(Text, default="{}")
     status: Mapped[str] = mapped_column(String, default="NEW")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -86,7 +86,7 @@ def upsert_report(session: Session, data: dict[str, Any]) -> None:
             "attachments_json", "headers_json",
         ):
             setattr(existing, field, data[field])
-        existing.updated_at = datetime.now(timezone.utc)
+        existing.updated_at = datetime.now(UTC)
     else:
         session.add(ReportRow(**data))
     session.commit()

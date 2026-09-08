@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from unittest.mock import patch
-from fastapi.testclient import TestClient
-from triage.dashboard.app import app
 from fastapi.testclient import TestClient
 from triage.dashboard.app import app
 from triage.db import get_session, list_reports, init_db, get_report

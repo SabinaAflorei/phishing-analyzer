@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import re
 
-from bs4 import BeautifulSoup, Tag
-from typing import Any
+from bs4 import BeautifulSoup
 
 _HIDDEN_STYLE_PATTERNS = [
     re.compile(r"display\s*:\s*none", re.IGNORECASE),
@@ -35,10 +34,10 @@ def _has_hidden_style(style: str) -> bool:
         return True
     color_match = _STYLE_COLOR_RE.search(style)
     bg_match = _STYLE_BG_RE.search(style)
-    if color_match and bg_match:
-        if _normalize_color(color_match.group(1)) == _normalize_color(bg_match.group(1)):
-            return True
-    return False
+    return bool(
+      color_match and bg_match
+      and _normalize_color(color_match.group(1)) == _normalize_color(bg_match.group(1))
+    )
 
 
 def contains_hidden_content(html: str) -> bool:
@@ -49,10 +48,7 @@ def contains_hidden_content(html: str) -> bool:
     has_hidden = False
     for element in soup.find_all(style=True):
         raw_style = element.get("style", "")
-        if isinstance(raw_style, list):
-            style_value = "".join(raw_style)
-        else:
-            style_value = raw_style
+        style_value = "".join(raw_style) if isinstance(raw_style, list) else raw_style
         if _has_hidden_style(style_value):
             has_hidden = True
             element.decompose()

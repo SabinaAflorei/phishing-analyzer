@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from triage.drafter import build_draft, sanitize_for_model
 from triage.drafter.prompts import STATIC_TEMPLATES, split_email
-from triage.verdicts import Analysis, Verdict
+from triage.verdicts import Analysis, Verdict, Evidence, Severity
 
 
 def test_sanitize_for_model_basic() -> None:
@@ -85,3 +85,21 @@ def test_static_templates_valid_email_structure() -> None:
         assert greeting != "", f"Șablonul static pentru {verdict_key} nu are un salut valid."
         assert body != "", f"Șablonul static pentru {verdict_key} nu are corp de mesaj."
         assert closing != "", f"Șablonul static pentru {verdict_key} nu are o încheiere validă."
+
+def test_build_draft_with_working_llm_client_uses_evidence() -> None:
+    """Regresie: evidence_text nedefinit cauza NameError la orice draft
+    generat prin LLM real, mascat de except Exception generic care cadea
+    silentios pe fallback static."""
+
+    class _FakeWorkingClient:
+        def generate(self, system_prompt: str, prompt: str, temperature: float = 0.1) -> str:
+            assert "Dovezi analiză" in prompt
+            return "Bună ziua, Ion,\n\nText de test.\n\nCu stimă,"
+
+    analysis = Analysis(
+        verdict=Verdict.MALICIOUS,
+        confidence=0.9,
+        evidence=[Evidence(code="AUTH_FAILURE", severity=Severity.HIGH, description="test")],
+    )
+    draft = build_draft(analysis=analysis, reporter_name="Ion", llm_client=_FakeWorkingClient())
+    assert "Text de test" in draft        

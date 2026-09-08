@@ -14,7 +14,7 @@ from triage.settings import get_settings
 
 logger = logging.getLogger(__name__)
 GENERIC_TERMS = {
-    "scan", "serviciul", "service", "no-reply", "noreply", 
+    "scan", "serviciul", "service", "no-reply", "noreply",
     "support", "admin", "notification", "notifications", "info",
     "helpdesk", "ticketing", "desk", "system", "securitate"
 }
@@ -57,7 +57,7 @@ def extract_first_name(from_header: str) -> str | None:
 
     # Curatare partea de Display Name (dinaintea adresei din <...>)
     display_name = from_header.split("<")[0].replace('"', '').strip()
-    
+
     if not display_name and "@" in from_header:
         display_name = from_header.split("@")[0].replace("<", "").strip()
 
@@ -82,12 +82,12 @@ def _format_evidence_for_prompt(analysis: Analysis) -> str:
     """Formatează și aplică defang pe dovezile din analiză pentru a le trimite sigur modelului LLM."""
     if not analysis.evidence:
         return "Nu există detalii suplimentare specifice."
-
+    max_chars = get_settings().llm.max_input_chars
     formatted_lines = []
     for ev in analysis.evidence:
         # Sanitizare detaliu si descrierea inainte de a le defanga
-        clean_detail = sanitize_for_model(ev.detail, max_chars=get_settings().llm.max_input_chars) if ev.detail else ""
-        clean_desc = sanitize_for_model(ev.description)
+        clean_detail = sanitize_for_model(ev.detail, max_chars=max_chars) if ev.detail else ""
+        clean_desc = sanitize_for_model(ev.description, max_chars=max_chars)
 
         detail_str = f" ({defang(clean_detail)})" if clean_detail else ""
         desc_defanged = defang(clean_desc)
@@ -125,8 +125,6 @@ def build_draft(analysis: Analysis, reporter_name: str, llm_client: Any = None) 
                 evidence_text = _format_evidence_for_prompt(analysis)
                 prompt_prenume = f"Prenume coleg: {prenume}\n" if prenume else "Prenume coleg: Necunoscut (Folosește doar 'Bună ziua,')\n"
                 user_message = f"{prompt_prenume}Dovezi analiză:\n{evidence_text}"
-                max_chars= get_settings().llm.max_input_chars
-                evidence_text=_format_evidence_for_prompt(analysis)
 
                 response_text = llm_client.generate(
                     system_prompt=system_prompt,

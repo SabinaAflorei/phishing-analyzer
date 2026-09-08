@@ -6,8 +6,6 @@ import logging
 import os
 from pathlib import Path
 import email
-from email.message import Message
-from typing import List
 from triage.settings import get_settings
 import imaplib
 

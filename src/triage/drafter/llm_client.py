@@ -32,14 +32,14 @@ class OllamaClient:
             "options": {"temperature": temperature},
         }
         data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
+        req = urllib.request.Request(  # noqa: S310 - base_url vine din config local (settings.yaml), nu din input extern
             f"{self.base_url}/api/generate",
             data=data,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:  # noqa: S310
                 body = resp.read()
         except (urllib.error.URLError, TimeoutError) as err:
             raise OllamaError(f"Ollama indisponibil la {self.base_url}: {err}") from err

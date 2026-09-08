@@ -27,7 +27,6 @@ def test_ingest_is_idempotent(tmp_path: Path, monkeypatch) -> None:
 def test_no_unfanged_urls_in_db(tmp_path: Path) -> None:
     """Criteriul 8.2 (I6): niciun URL nedefanged in DB - orice URL stocat
     trebuie sa fie in forma hxxp[://]... , niciodata http://... clicabil."""
-    import json
 
     db_path = tmp_path / "test_defang.sqlite3"
     init_db(db_path)

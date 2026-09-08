@@ -204,7 +204,7 @@ def is_cybeready_simulation(parsed: ParsedEmail) -> bool:
     # Semnal 3: hostname de tracking in URL-uri (domeniu inregistrabil, nu substring!)
     tracking_hosts = {h.lower() for h in CYBEREADY_CONFIG.get("tracking_hostnames", [])}
     url_hosts = {urlparse(u).netloc.lower() for u in parsed.urls if u}
-    has_tracking_signal = any(
+    _has_tracking_signal = any(
         h == th or is_subdomain_of(h, th)
         for h in url_hosts for th in tracking_hosts
     )
@@ -239,7 +239,7 @@ def _check_display_name_mismatch(parsed: ParsedEmail, sender_domain: str) -> Evi
                 return Evidence(
                     code="DISPLAY_NAME_MISMATCH",
                     severity=Severity.HIGH,
-                    description=f"Numele afișat sugerează compania proprie, dar domeniul expeditorului nu corespunde.",
+                    description="Numele afișat sugerează compania proprie, dar domeniul expeditorului nu corespunde.",
                     detail=defang(f"Display-name: {parsed.from_display_name}, domeniu real: {sender_domain}"),
                 )
 

@@ -1,4 +1,4 @@
-from triage.settings import Settings, reload_settings
+from triage.settings import reload_settings
 
 
 def test_settings_load_from_example_fallback() -> None:

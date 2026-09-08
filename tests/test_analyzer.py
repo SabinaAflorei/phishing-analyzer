@@ -250,11 +250,11 @@ def _pick_owned_domain() -> str:
 
 
 def test_homoglyph_domain_detected() -> None:
-    """domeniu cu 'а' chirilic in loc de 'a' latin - vizual identic, Levenshtein=0"""
+    """domeniu cu 'а' chirilic in loc de 'a' latin - vizual identic, Levenshtein=0""" # noqa: RUF002
     owned = _pick_owned_domain()
     if "a" not in owned:
         pytest.skip(f"domeniul de test '{owned}' nu contine 'a' latin de inlocuit")
-    homoglyph_domain = owned.replace("a", "\u0430", 1)  # 'а' chirilic (U+0430)
+    homoglyph_domain = owned.replace("a", "\u0430", 1)  # 'а' chirilic (U+0430)  # noqa: RUF003
 
     parsed = ParsedEmail(
         report_kind=ReportKind.UNKNOWN,
