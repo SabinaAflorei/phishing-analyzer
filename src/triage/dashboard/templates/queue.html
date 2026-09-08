@@ -6,10 +6,34 @@
 <div class="card">
     <h2 style="margin-bottom: 1rem;">Coadă de Lucru</h2>
 
+    <!-- Filtre (punctul 6) - client-side, fara request nou -->
+    <div class="filter-bar" id="filter-bar">
+        <span class="filter-chip active" data-filter-type="verdict" data-filter-value="all">
+            Toate <span class="count">{{ reports|length }}</span>
+        </span>
+        {% for v in ['SIMULATION', 'MALICIOUS', 'SPAM', 'LEGITIMATE', 'NEEDS_REVIEW'] %}
+        {% set c = reports|selectattr('verdict', 'equalto', v)|list|length %}
+        {% if c > 0 %}
+        <span class="filter-chip {{ v }}-chip" data-filter-type="verdict" data-filter-value="{{ v }}">
+            {{ v }} <span class="count">{{ c }}</span>
+        </span>
+        {% endif %}
+        {% endfor %}
+        <span style="width: 1px; background: var(--border-color); margin: 0 0.3rem;"></span>
+        {% for s in ['NEW', 'SENT', 'ESCALATED'] %}
+        {% set c = reports|selectattr('status', 'equalto', s)|list|length %}
+        {% if c > 0 %}
+        <span class="filter-chip" data-filter-type="status" data-filter-value="{{ s }}">
+            {{ s }} <span class="count">{{ c }}</span>
+        </span>
+        {% endif %}
+        {% endfor %}
+    </div>
+
     <form id="bulk-form" method="post" action="/bulk-action">
-        <div style="margin-bottom: 1rem; background: #f1f5f9; padding: 0.75rem 1rem; border-radius: 6px; display: flex; gap: 12px; align-items: center;">
-            <strong style="font-size: 0.9rem;">Acțiuni Bulk:</strong>
-            <select name="bulk_status" style="padding: 6px 10px; border: 1px solid #cbd5e0;">
+        <div style="margin-bottom: 1rem; background: var(--table-header-bg); padding: 0.75rem 1rem; border-radius: 6px; display: flex; gap: 12px; align-items: center;">
+            <strong style="font-size: 0.9rem; color: var(--text-main);">Acțiuni Bulk:</strong>
+            <select name="bulk_status" style="padding: 6px 10px;">
                 <option value="NEW">Marchează ca NOU (NEW)</option>
                 <option value="SENT">Marchează ca TRIMIS (SENT)</option>
                 <option value="ESCALATED">Marchează ca ESCALAT (ESCALATED)</option>
@@ -17,6 +41,7 @@
             <button type="submit" style="background-color: var(--primary); color: white; padding: 6px 16px;">
                 Aplică
             </button>
+            <span id="bulk-selection-count">Niciun raport selectat</span>
         </div>
 
         <table>
@@ -32,21 +57,37 @@
                     <th>Acțiune</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="queue-body">
                 {% for report in reports %}
-                <tr>
-                    <td><input type="checkbox" name="selected_ids" value="{{ report.id }}" class="report-checkbox"></td>
+                {% set touched = report.status != 'NEW' or report.verdict != report.verdict_original %}
+                <tr class="{{ 'row-touched' if touched else '' }}"
+                    data-verdict="{{ report.verdict }}" data-status="{{ report.status }}">
+                    <td><input type="checkbox" name="selected_ids" value="{{ report.id }}" class="report-checkbox" onchange="updateSelectionCount()"></td>
                     <td><code>{{ report.id }}</code></td>
-                    <td><a href="/report/{{ report.id }}" style="text-decoration: none; font-weight: 600; color: #2d3748;">{{ report.subject | decode_mime }}</a></td>
+                    <td>
+                        <a href="/report/{{ report.id }}" style="text-decoration: none; font-weight: 600; color: var(--text-main);">{{ report.subject | decode_mime }}</a>
+                        {% if touched %}
+                        <span class="touched-badge" title="Corectat sau escalat manual de analist">✎ revizuit</span>
+                        {% endif %}
+                    </td>
                     <td>{{ report.reporter }}</td>
                     <td><span class="badge {{ report.verdict }}">{{ report.verdict }}</span></td>
-                    <td>{{ report.confidence }}</td>
-                    <td><span style="font-size: 0.85rem; font-weight: 600; color: #4a5568;">{{ report.status }}</span></td>
-                    <td><a href="/report/{{ report.id }}" style="text-decoration: none; background: #edf2f7; color: #2d3748; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem;">Deschide</a></td>
+                    {% set conf_val = report.confidence or 0 %}
+                    {% set conf_class = 'high' if conf_val >= 0.85 else ('medium' if conf_val >= 0.6 else 'low') %}
+                    <td>
+                       <div class="confidence-wrap">
+                        <div class="confidence-bar">
+                          <div class="confidence-bar-fill {{ conf_class }}" style="width: {{ (conf_val * 100) | round }}%;"></div>
+                        </div>
+                        <span class="confidence-label">{{ (conf_val * 100) | round }}%</span>
+                       </div>
+                    </td>
+                    <td><span style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">{{ report.status }}</span></td>
+                    <td><a href="/report/{{ report.id }}" class="btn-open">Deschide →</a></td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8" style="text-align: center; color: #718096; padding: 2rem;">Nu există rapoarte în coadă.</td>
+                    <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">Nu există rapoarte în coadă.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -55,11 +96,67 @@
 </div>
 
 <script>
+    
 function toggleAll(source) {
-    checkboxes = document.getElementsByClassName('report-checkbox');
-    for(var i=0, n=checkboxes.length;i<n;i++) {
+    const checkboxes = document.getElementsByClassName('report-checkbox');
+    for (let i = 0, n = checkboxes.length; i < n; i++) {
         checkboxes[i].checked = source.checked;
     }
+    updateSelectionCount();
 }
+
+function updateSelectionCount() {
+    const checked = document.querySelectorAll('.report-checkbox:checked').length;
+    const el = document.getElementById('bulk-selection-count');
+    if (checked === 0) {
+        el.textContent = 'Niciun raport selectat';
+        el.classList.remove('has-selection');
+    } else {
+        el.textContent = checked + (checked === 1 ? ' raport selectat' : ' rapoarte selectate');
+        el.classList.add('has-selection');
+    }
+}
+
+// Filtrare client-side pe verdict/status (punctul 6)
+document.addEventListener('DOMContentLoaded', function () {
+    const chips = document.querySelectorAll('.filter-chip');
+    let activeVerdict = 'all';
+    let activeStatus = 'all';
+
+    chips.forEach(chip => {
+        chip.addEventListener('click', function () {
+            const type = this.dataset.filterType;
+            const value = this.dataset.filterValue;
+
+            document.querySelectorAll(`.filter-chip[data-filter-type="${type}"]`).forEach(c => c.classList.remove('active'));
+
+            if (type === 'verdict') {
+                if (activeVerdict === value) {
+                    activeVerdict = 'all';
+                    document.querySelector('.filter-chip[data-filter-value="all"]').classList.add('active');
+                } else {
+                    activeVerdict = value;
+                    this.classList.add('active');
+                }
+            } else {
+                if (activeStatus === value) {
+                    activeStatus = 'all';
+                } else {
+                    activeStatus = value;
+                    this.classList.add('active');
+                }
+            }
+            applyFilters();
+        });
+    });
+
+    function applyFilters() {
+        document.querySelectorAll('#queue-body tr[data-verdict]').forEach(row => {
+            const matchVerdict = activeVerdict === 'all' || row.dataset.verdict === activeVerdict;
+            const matchStatus = activeStatus === 'all' || row.dataset.status === activeStatus;
+            row.classList.toggle('row-hidden', !(matchVerdict && matchStatus));
+        });
+    }
+});
 </script>
 {% endblock %}
