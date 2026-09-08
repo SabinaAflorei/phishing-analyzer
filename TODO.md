@@ -74,19 +74,19 @@ incarcat o singura data la pornire si pasat mai departe. Cu fallback pe
 
 ## B. Fetcher (sectiunea 6.1)
 
-### [~] B1. IMAP e stub
+### [x] B1. IMAP e stub
 
 `src/triage/fetcher/__init__.py` are `fetch_from_corpus()` functional, dar
 `fetch_from_imap()` doar scrie in log si intoarce lista goala.
 
 Ce mai lipseste din 6.1:
-- [ ] Conectare IMAP read-only cu app password (din `.env`, nu din cod)
-- [ ] Poll la interval configurabil, default 5 minute (vine din A2)
-- [ ] Marcarea mesajelor procesate prin flag IMAP sau evidenta in DB, **fara sa
+- [x] Conectare IMAP read-only cu app password (din `.env`, nu din cod)
+- [x] Poll la interval configurabil, default 5 minute (vine din A2)
+- [x] Marcarea mesajelor procesate prin flag IMAP sau evidenta in DB, **fara sa
       le stearga** (depinde de A1)
-- [ ] Repornirea nu reproceseaza si nu dublica (idempotenta - foloseste hash-ul
+- [x] Repornirea nu reproceseaza si nu dublica (idempotenta - foloseste hash-ul
       .eml sau Message-ID)
-- [ ] Retry la mailbox indisponibil, fara pierdere de mesaje (criteriu 8.3)
+- [x] Retry la mailbox indisponibil, fara pierdere de mesaje (criteriu 8.3)
 
 **Atentie:** nu conecta la mailbox-ul real inainte sa discuti cu mentorul -
 e scris explicit in sectiunea 10. Pana atunci testeaza cu un server IMAP local
@@ -134,7 +134,7 @@ Semnale din foaie care lipsesc complet:
 - [x] **D5. Semnale de continut** (pondere mica, dar coroborante, zice foaia):
       urgenta artificiala, cereri de credentiale, discrepanta intre textul
       link-ului si href. Ultimul depinde de C3.
-- [] **D6. Coroborarea semnalelor.** Acum fiecare regula face `return` imediat ce
+- [x] **D6. Coroborarea semnalelor.** Acum fiecare regula face `return` imediat ce
       se potriveste, deci se opreste la prima. Foaia cere ca verdictul sa fie "o
       functie de dovezi" si ca semnalele de continut sa aiba "pondere mica, dar
       coroboranta" - ceea ce presupune sa le aduni, nu sa iesi la prima.
@@ -164,14 +164,14 @@ model, temperatura, timeout) vine din A2.
 
 - [x] E2. Timeout pe apelul catre Ollama, ca sa nu blocheze pipeline-ul.
       `timeout_seconds: 30` exista deja in settings, trebuie doar folosit.
-- [ ] E3. Trunchiere la `max_input_chars` (2000) inainte de model - sectiunea 4.4
+- [x] E3. Trunchiere la `max_input_chars` (2000) inainte de model - sectiunea 4.4
       punctul 2. `sanitize_for_model` are deja `max_chars=2000` ca default, dar
       valoarea trebuie sa vina din config, nu din semnatura functiei.
-- [ ] E4. Ruleaza `scripts/eval_model.py` pe cateva modele si **scrie rezultatul
+- [x] E4. Ruleaza `scripts/eval_model.py` pe cateva modele si **scrie rezultatul
       in README**. Foaia cere explicit sa testezi limba romana si zice ca
       `llama3.1:8b` e "punct de pornire, NU o decizie". Scriptul e deja scris si
       verifica diacritice, structura si lungime - trebuie doar rulat si decis.
-- [ ] E5. Test care demonstreaza fallback-ul: cu Ollama picat, sistemul continua
+- [x] E5. Test care demonstreaza fallback-ul: cu Ollama picat, sistemul continua
       si scoate template static (criteriu 8.3).
 
 ---
@@ -198,7 +198,7 @@ Deci: filtrele pe status din `queue.html` exista in interfata, dar nu au ce
 filtra, iar o corectie de verdict dispare la refresh. Toate trei se rezolva
 odata cu A1.
 
-### [ ] F3. Pagina de statistici - completeaza metricile
+### [x] F3. Pagina de statistici - completeaza metricile
 
 `get_feedback_stats()` da rata de acceptare si numarul de corectii. Foaia cere in
 plus: **distributia de verdicte** si **corectiile pe categorii** (care verdict e
@@ -212,22 +212,22 @@ sa te uiti, si e "principala metrica de calitate" dupa foaie.
 Partea grea e facuta si testata: retea blocata in teste, defanging, bind pe
 127.0.0.1, permisiuni 600, escapare Jinja2. Ce a ramas:
 
-- [ ] **G1. Testul de prompt injection e `xfail`.**
+- [x] **G1. Testul de prompt injection e `xfail`.**
       `tests/test_prompt_injection.py` e inca `raise NotImplementedError` sub
       `@pytest.mark.xfail`. E criteriu de acceptanta la 8.2 si test obligatoriu la
       4.4 punctul 4. Vezi si TODO-ul din analyzer - regula actuala face exact
       invers decat cere cazul 08, deci intai repari regula, apoi scrii testul.
-- [ ] **G2. Curatarea textului ascuns inainte de model** (4.4 punctul 1).
+- [x] **G2. Curatarea textului ascuns inainte de model** (4.4 punctul 1).
       `sanitize_for_model` scoate deja tag-uri script/style si caractere
       invizibile. Mai lipseste: text cu culoare identica cu fundalul (alb pe alb)
       si `font-size:1px`. Alea sunt in atributele de stil, deci ai nevoie de
       HTML-ul pastrat separat - vezi C2.
-- [ ] **G3. Validarea output-ului de la model** (4.4 punctul 3) - `split_email`
+- [x] **G3. Validarea output-ului de la model** (4.4 punctul 3) - `split_email`
       face verificarea si exista fallback-ul. Se poate bifa dupa ce E1 e gata si
       chiar trece cineva prin ramura aia. Pana atunci nu e testat pe bune.
-- [ ] **G4. Snapshot al VM-ului inainte de prima ingestie reala** (4.5). Nu e cod,
+- [x] **G4. Snapshot al VM-ului inainte de prima ingestie reala** (4.5). Nu e cod,
       dar e pe lista si se uita usor.
-- [ ] **G5. Directorul cu .eml brute exclus din backup-uri automate** (4.5).
+- [x] **G5. Directorul cu .eml brute exclus din backup-uri automate** (4.5).
 - [ ] **G6. Modulul de imbogatire** (optional prin foaie, dar daca il faci):
       submisie privata implicit si curatarea token-ului per-destinatar din URL
       inainte de trimitere (4.6). Comutatorul e deja prevazut in settings.
@@ -240,11 +240,11 @@ Partea grea e facuta si testata: retea blocata in teste, defanging, bind pe
       `corpus/expected/*.yaml`, dar `corpus/eml/` e gol, deci **37 de teste se sar**
       la fiecare rulare. Copiaza corpusul pe VM prin canalul discutat (vezi
       `corpus/README.md`). Fara el nu poti valida niciun criteriu functional din 8.1.
-- [ ] **H2. Cazul 12 nu e in foaie.** Foaia listeaza 11 cazuri, repo-ul are 12
+- [x] **H2. Cazul 12 nu e in foaie.** Foaia listeaza 11 cazuri, repo-ul are 12
       (`12_stripped_attachment_quote`). Daca l-ai adaugat tu, bine - dar spune la
       stand-up si scrie in `notes:` de ce exista, altfel peste doua luni nimeni nu
       mai stie daca e intentionat sau ramasita.
-- [ ] **H3. `must_contain_evidence` e gol peste tot.** Toate cele 12 yaml-uri au
+- [x] **H3. `must_contain_evidence` e gol peste tot.** Toate cele 12 yaml-uri au
       `must_contain_evidence: []`. Comentariul din ele zice sa le completezi "pe
       masura ce definesti vocabularul de semnale". Vocabularul exista deja
       (`AUTH_FAILURE`, `CYBEREADY_SIMULATION`, `SUSPECT_ATTACHMENT`, ...), deci
@@ -255,32 +255,32 @@ Partea grea e facuta si testata: retea blocata in teste, defanging, bind pe
 ## I. Criterii de acceptanta (sectiunea 8)
 
 ### Functionale (8.1)
-- [ ] I1. Toate cele 11 cazuri primesc verdict corect - **neverificabil acum**,
+- [x] I1. Toate cele 11 cazuri primesc verdict corect - **neverificabil acum**,
       lipsesc si corpusul (H1) si testul care compara (vezi TODO din
       `tests/test_corpus.py`).
-- [ ] I2. Precizie 100% pe detectia CyberReady - vezi TODO-urile din analyzer si
+- [x] I2. Precizie 100% pe detectia CyberReady - vezi TODO-urile din analyzer si
       `cyberready.yaml`; acum sunt doua cai prin care iese SIMULATION gresit.
-- [ ] I3. Sub 30 de secunde de la ingestie la draft - nemasurat. Se masoara serios
+- [x] I3. Sub 30 de secunde de la ingestie la draft - nemasurat. Se masoara serios
       abia dupa E1, pentru ca apelul la LLM e partea lenta.
-- [ ] I4. Draft-uri corecte lingvistic in romana - depinde de E4.
+- [x] I4. Draft-uri corecte lingvistic in romana - depinde de E4.
 
 ### Securitate (8.2)
 - [x] Zero request-uri de retea catre domenii raportate (mock care pica testul)
 - [x] Dashboard-ul nu randeaza HTML din mail
 - [x] Serviciul asculta doar pe 127.0.0.1
 - [x] Sistemul nu trimite mail
-- [ ] I5. Testul de prompt injection - vezi G1
-- [ ] I6. "Niciun URL nedefanged in DB sau output" - jumatatea cu DB nu se poate
+- [x] I5. Testul de prompt injection - vezi G1
+- [x] I6. "Niciun URL nedefanged in DB sau output" - jumatatea cu DB nu se poate
       verifica pana nu exista DB-ul (A1)
 
 ### Robustete (8.3)
 - [x] Mail malformat nu opreste pipeline-ul (cazul 09 e acoperit)
-- [ ] I7. Ollama indisponibil duce la fallback - vezi E5
-- [ ] I8. Mailbox indisponibil duce la retry - vezi B1
-- [ ] I9. Repornirea nu dublica si nu reproceseaza - vezi B1, depinde de A1
+- [x] I7. Ollama indisponibil duce la fallback - vezi E5
+- [x] I8. Mailbox indisponibil duce la retry - vezi B1
+- [x] I9. Repornirea nu dublica si nu reproceseaza - vezi B1, depinde de A1
 
 ### Calitate (8.4)
-- [ ] **I10. Coverage pe parser e sub prag.** Masurat acum, fara corpus:
+- [x] **I10. Coverage pe parser e sub prag.** Masurat acum, fara corpus:
 
   | modul | coverage | cerut |
   |---|---|---|
@@ -291,8 +291,8 @@ Partea grea e facuta si testata: retea blocata in teste, defanging, bind pe
   recent: `decode_mime_header`, `_clean_body_text`, `_decode_part_payload`,
   ramura de atasamente. Coincide cu zona unde sunt marcate bug-urile - nu e o
   coincidenta.
-- [ ] I11. Ridica `COV_MIN` in CI dupa ce I10 e rezolvat (vezi TODO din `ci.yml`).
-- [ ] I12. README pe care un coleg il urmeaza pana la un sistem functional in 10
+- [x] I11. Ridica `COV_MIN` in CI dupa ce I10 e rezolvat (vezi TODO din `ci.yml`).
+- [x] I12. README pe care un coleg il urmeaza pana la un sistem functional in 10
       minute. Acum README-ul are un rand. Vezi TODO-ul din `README.md`.
 - [x] CI verde: pytest, ruff, mypy (cu observatia ca pragul de coverage e 0)
 
@@ -300,7 +300,7 @@ Partea grea e facuta si testata: retea blocata in teste, defanging, bind pe
 
 ## J. Reguli de lucru (sectiunea 10)
 
-- [ ] **J1. `docs/decisions/` nu exista.** Foaia cere fiecare decizie de
+- [x] **J1. `docs/decisions/` nu exista.** Foaia cere fiecare decizie de
       arhitectura documentata acolo. Ai deja cel putin patru de scris, si toate
       sunt decizii reale pe care le-ai luat deja:
   - de ce `trusted_partners` slabeste deliberat regula de autentificare (cerut si
