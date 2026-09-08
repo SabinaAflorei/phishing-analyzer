@@ -8,14 +8,14 @@ sa aiba cu ce lucra fara sa expuna date reale.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Any
-from triage.drafter.llm_client import OllamaClient
 
+if TYPE_CHECKING:
+    from triage.drafter.llm_client import OllamaClient
 
 def _find_config_dir() -> Path:
     current = Path(__file__).resolve().parent
@@ -107,6 +107,7 @@ def llm_enabled() -> bool:
 
 
 def get_ollama_client() -> OllamaClient:
+    from triage.drafter.llm_client import OllamaClient
     llm = get_settings().llm
     return OllamaClient(
         base_url=llm.base_url,

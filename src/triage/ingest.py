@@ -45,7 +45,12 @@ def ingest_corpus(corpus_dir: Path) -> int:
                 "verdict": analysis.verdict.value,
                 "confidence": analysis.confidence,
                 "evidence_json": json.dumps([
-                    f"{e.description} ({e.detail})" if e.detail else e.description
+                    {
+                        "code": e.code,
+                        "severity": e.severity.value,
+                        "description": e.description,
+                        "detail": e.detail,
+                    }
                     for e in analysis.evidence
                 ]),
                 "defanged_urls_json": json.dumps(defanged_urls),
