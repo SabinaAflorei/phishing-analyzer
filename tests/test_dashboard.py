@@ -5,6 +5,7 @@ from triage.dashboard.app import app
 from triage.db import get_session, list_reports, init_db, get_report
 from triage.ingest import ingest_corpus
 from pathlib import Path
+from conftest import requires_corpus
 
 
 client = TestClient(app)
@@ -39,7 +40,7 @@ def test_healthz() -> None:
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
-
+@requires_corpus
 def test_queue_page(tmp_path:Path) -> None:
     db_with_corpus(tmp_path)
     client= TestClient(app)
@@ -51,7 +52,7 @@ def test_queue_page(tmp_path:Path) -> None:
     assert len(reports)>0
     assert reports[0].subject in response.text or reports[0].file_name in response.text
 
-
+@requires_corpus
 def test_report_detail_found(tmp_path: Path) -> None:
     db_with_corpus(tmp_path)
 
@@ -64,7 +65,7 @@ def test_report_detail_found(tmp_path: Path) -> None:
 
     assert response.status_code == 200
 
-
+@requires_corpus
 def test_report_detail_not_found(tmp_path: Path) -> None:
     db_with_corpus(tmp_path)
 
@@ -73,7 +74,7 @@ def test_report_detail_not_found(tmp_path: Path) -> None:
 
     assert response.status_code == 404
 
-
+@requires_corpus
 def test_mark_sent_persists_status(tmp_path: Path) -> None:
     db_with_corpus(tmp_path)
 
@@ -91,7 +92,7 @@ def test_mark_sent_persists_status(tmp_path: Path) -> None:
     assert row.status == "SENT"
     session.close()
 
-
+@requires_corpus
 def test_escalate_persists_status(tmp_path: Path) -> None:
     db_with_corpus(tmp_path)
 
@@ -109,7 +110,7 @@ def test_escalate_persists_status(tmp_path: Path) -> None:
     assert row.status == "ESCALATED"
     session.close()
 
-
+@requires_corpus
 def test_verdict_override_persists_and_reflects_on_reload(tmp_path: Path) -> None:
     db_with_corpus(tmp_path)
 
@@ -126,7 +127,7 @@ def test_verdict_override_persists_and_reflects_on_reload(tmp_path: Path) -> Non
     response = client.get(f"/report/{report_id}")
     assert "LEGITIMATE" in response.text
 
-
+@requires_corpus
 def test_bulk_action_updates_multiple_statuses(tmp_path: Path) -> None:
     db_with_corpus(tmp_path)
 

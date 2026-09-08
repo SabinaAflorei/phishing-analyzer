@@ -3,6 +3,7 @@ from pathlib import Path
 from triage.db import get_session, init_db, list_reports
 from triage.ingest import ingest_corpus
 import json
+from conftest import requires_corpus
 
 
 def test_ingest_is_idempotent(tmp_path: Path, monkeypatch) -> None:
@@ -24,6 +25,7 @@ def test_ingest_is_idempotent(tmp_path: Path, monkeypatch) -> None:
     assert first_count == second_count
     assert rows_after_first == rows_after_second  # nicio duplicare la repornire
 
+@requires_corpus
 def test_no_unfanged_urls_in_db(tmp_path: Path) -> None:
     """Criteriul 8.2 (I6): niciun URL nedefanged in DB - orice URL stocat
     trebuie sa fie in forma hxxp[://]... , niciodata http://... clicabil."""
