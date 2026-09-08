@@ -9,10 +9,12 @@ from bs4 import BeautifulSoup
 from triage.defang import defang
 from triage.drafter.prompts import STATIC_TEMPLATES, SYSTEM_PROMPTS, split_email
 from triage.verdicts import Analysis, Verdict
+from triage.html_hygiene import strip_hidden_elements
+from triage.settings import get_settings
 
 logger = logging.getLogger(__name__)
 GENERIC_TERMS = {
-    "scan", "serviciul", "service", "no-reply", "noreply", 
+    "scan", "serviciul", "service", "no-reply", "noreply",
     "support", "admin", "notification", "notifications", "info",
     "helpdesk", "ticketing", "desk", "system", "securitate"
 }
@@ -30,7 +32,7 @@ def sanitize_for_model(text: str, max_chars: int = 2000) -> str:
     for element in soup(["script", "style"]):
         element.decompose()
 
-    clean_text = soup.get_text(separator=" ")
+    clean_text = strip_hidden_elements(text)
 
     # 2. Eliminare caractere invizibile / directionale Unicode (incluzând FEFF, 2060, 2066-2069)
     invisible_chars_pattern = r"[\u200B-\u200D\u200E\u200F\u202A-\u202E\uFEFF\u2060\u2066-\u2069]"
@@ -55,7 +57,7 @@ def extract_first_name(from_header: str) -> str | None:
 
     # Curatare partea de Display Name (dinaintea adresei din <...>)
     display_name = from_header.split("<")[0].replace('"', '').strip()
-    
+
     if not display_name and "@" in from_header:
         display_name = from_header.split("@")[0].replace("<", "").strip()
 
@@ -80,12 +82,12 @@ def _format_evidence_for_prompt(analysis: Analysis) -> str:
     """Formatează și aplică defang pe dovezile din analiză pentru a le trimite sigur modelului LLM."""
     if not analysis.evidence:
         return "Nu există detalii suplimentare specifice."
-
+    max_chars = get_settings().llm.max_input_chars
     formatted_lines = []
     for ev in analysis.evidence:
         # Sanitizare detaliu si descrierea inainte de a le defanga
-        clean_detail = sanitize_for_model(ev.detail) if ev.detail else ""
-        clean_desc = sanitize_for_model(ev.description)
+        clean_detail = sanitize_for_model(ev.detail, max_chars=max_chars) if ev.detail else ""
+        clean_desc = sanitize_for_model(ev.description, max_chars=max_chars)
 
         detail_str = f" ({defang(clean_detail)})" if clean_detail else ""
         desc_defanged = defang(clean_desc)

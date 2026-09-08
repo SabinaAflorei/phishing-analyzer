@@ -12,6 +12,11 @@ from triage.domains import is_subdomain_of
 from triage.parser import ParsedEmail, ReportKind
 from triage.verdicts import Analysis, Evidence, Severity, Verdict
 from urllib.parse import urlparse
+import logging
+from triage.html_hygiene import contains_hidden_content
+from confusable_homoglyphs import confusables
+
+logger = logging.getLogger(__name__)
 
 
 def _find_config_dir() -> Path:
@@ -24,16 +29,26 @@ def _find_config_dir() -> Path:
         current = current.parent
     return Path(__file__).resolve().parent.parent.parent.parent / "config"
 
-# TODO(curatenie): PROJECT_ROOT nu e folosit nicaieri si oricum indica spre
-# src/, nu spre radacina proiectului (parents[0]=analyzer, [1]=triage, [2]=src).
-# Sterge-l.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = _find_config_dir()
 
 
 def load_yaml_config(file_name: str) -> dict[str, Any]:
     """Încarcă un fișier de configurație YAML din directorul config."""
     config_path = CONFIG_DIR / file_name
+    if not config_path.exists():
+        example_name = (
+            file_name[: -len(".yaml")] + ".example.yaml"
+            if file_name.endswith(".yaml")
+            else file_name + ".example"
+        )
+        example_path = CONFIG_DIR / example_name
+        if example_path.exists():
+            logger.warning(
+                "Config '%s' nu exista, se foloseste exemplul '%s'. "
+                "Pe VM, adauga fisierul real in %s.",
+                file_name, example_name, CONFIG_DIR,
+            )
+            config_path = example_path
     if config_path.exists():
         with config_path.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
@@ -62,34 +77,10 @@ CYBEREADY_LEGACY_DOMAINS = {
 config_domains = set(CYBEREADY_CONFIG.get("sender_domains", []))
 ALL_CYBEREADY_DOMAINS = config_domains.union(CYBEREADY_LEGACY_DOMAINS)
 
-# TODO(curatenie): cele trei constante de mai jos sunt calculate dar nefolosite -
-# is_cybeready_simulation reciteste CYBEREADY_CONFIG pe loc. Alege o varianta:
-# ori le folosesti aici, ori le stergi. CYBEREADY_HEADER_MARKERS (X-CRPS,
-# X-Virtual-MTA) nu e citit de nicaieri, desi comentariul "Semnal 4" din
-# is_cybeready_simulation pretinde ca ar fi. Ori implementezi semnalul, ori
-# scoti comentariul.
-CYBEREADY_IPS = set(CYBEREADY_CONFIG.get("sender_ips", []))
-CYBEREADY_MSG_ID_SUFFIXES = set(CYBEREADY_CONFIG.get("message_id_suffixes", []))
-CYBEREADY_HEADER_MARKERS = CYBEREADY_CONFIG.get("header_markers", {})
-
 # Extensii de atasamente suspecte din attachment_rules.yaml
-#
-# TODO(bug): ".iso" si ".img" nu mai sunt semnalate deloc - e o regresie fata de
-# commit-ul dinainte de 4bb6467, unde erau in lista hardcodata.
-# Ce e gresit: se citesc doar "executable_extensions", "script_extensions" (cheie
-# care nici nu exista in attachment_rules.yaml) si "macro_enabled_extensions".
-# Cheia "archive_extensions", unde stau iso, img, zip, rar, 7z, nu e citita.
-# Verificat: ".exe" -> True, ".docm" -> True, dar ".iso" -> False, ".img" -> False.
-# Fisierele ISO sunt un mod foarte folosit de livrare de malware, tocmai pentru ca
-# trec de filtrele care se uita doar la .exe.
-# Cum rezolvi: adauga "archive_extensions" in reuniune si scoate
-# "script_extensions" care nu exista.
-# Pont general: .get(cheie, []) pe o cheie scrisa gresit nu da niciodata eroare,
-# doar tacere. Merita o verificare la pornire care sa strige daca lipseste o cheie
-# asteptata din config.
 raw_extensions = (
     set(ATTACHMENT_CONFIG.get("executable_extensions", []))
-    | set(ATTACHMENT_CONFIG.get("script_extensions", []))
+    | set(ATTACHMENT_CONFIG.get("archive_extensions", []))
     | set(ATTACHMENT_CONFIG.get("macro_enabled_extensions", []))
 )
 
@@ -103,19 +94,6 @@ for ext in raw_extensions:
     else:
         SUSPECT_EXTENSIONS.add(f".{ext_clean}")  #varianta cu punct
 
-# TODO(bug): regex-ul de dubla extensie condamna fisiere perfect normale.
-# Ce e bine: ai trecut de la lista hardcodata la regex-ul din config, corect.
-# Ce e gresit: regex-ul nu pune nicio conditie pe a DOUA extensie -
-#   \.(pdf|doc|docx|xls|xlsx|jpg|png|txt)\.[a-z0-9]{2,4}$
-# Testat pe codul asta:
-#   invoice.pdf.exe   -> MALICIOUS 0.95  (corect)
-#   raport.xls.pdf    -> MALICIOUS 0.95  (fals pozitiv)
-#   poza.jpg.png      -> MALICIOUS 0.95  (fals pozitiv)
-#   contract.doc.docx -> MALICIOUS 0.95  (fals pozitiv)
-# Cum rezolvi: periculoasa e combinatia "pare document, dar e executabil", deci a
-# doua extensie trebuie sa fie una din SUSPECT_EXTENSIONS. Cel mai simplu: lasa
-# regex-ul sa prinda tiparul de dubla extensie, iar dupa ce a prins verifica in
-# cod, la punctul 3 din analyze(), ca extensia finala chiar e in SUSPECT_EXTENSIONS.
 _double_ext_pattern_str = ATTACHMENT_CONFIG.get("suspicious_double_extension_pattern")
 _DOUBLE_EXT_REGEX = _re.compile(_double_ext_pattern_str, _re.IGNORECASE) if _double_ext_pattern_str else None
 
@@ -126,6 +104,73 @@ def extract_email_address(raw_from: str) -> str:
         return ""
     _, addr = email.utils.parseaddr(raw_from)
     return addr.strip().lower() if addr else raw_from.strip().lower()
+
+
+def _domain_of(address: str) -> str:
+    """Extrage domeniul dintr-un header de adresa (From/Reply-To/Return-Path)."""
+    addr = extract_email_address(address)
+    return addr.split("@")[-1].lower() if "@" in addr else ""
+
+
+def _domain_mismatch(a: str, b: str) -> bool:
+    """True daca doua domenii sunt diferite si niciunul nu e subdomeniu al celuilalt."""
+    if not a or not b:
+        return False
+    return a != b and not is_subdomain_of(a, b) and not is_subdomain_of(b, a)
+
+
+def _decode_punycode_label(label: str) -> str:
+    """Decodeaza un label 'xn--...' in Unicode. Daca nu e punycode valid,
+    intoarce eticheta originala neschimbata."""
+    if not label.lower().startswith("xn--"):
+        return label
+    try:
+        return label.encode("ascii").decode("idna")
+    except (UnicodeError, UnicodeDecodeError):
+        return label
+
+
+def _domain_to_unicode(domain: str) -> str:
+    """Decodeaza fiecare eticheta punycode dintr-un domeniu complet."""
+    labels = domain.split(".")
+    return ".".join(_decode_punycode_label(label) for label in labels)
+
+
+def _confusable_skeleton(text: str) -> str:
+    """Inlocuieste fiecare caracter confundabil cu echivalentul lui latin,
+    folosind confusable_homoglyphs. Fara caractere confundabile, textul
+    ramane neschimbat."""
+    result = confusables.is_confusable(text, preferred_aliases=["latin"])
+    if not result:
+        return text
+    skeleton = text
+    for item in result:
+        char = item["character"]
+        homoglyphs = item.get("homoglyphs", [])
+        if homoglyphs:
+            replacement = homoglyphs[0]["c"]
+            skeleton = skeleton.replace(char, replacement)
+    return skeleton
+
+
+def _is_homoglyph_of_owned(sender_domain: str) -> str | None:
+    """Verifica daca domeniul (decodat din punycode, daca era cazul) devine
+    identic cu un domeniu propriu dupa normalizarea caracterelor confundabile.
+    Intoarce domeniul propriu cu care se confunda, sau None."""
+    if not sender_domain:
+        return None
+
+    decoded = _domain_to_unicode(sender_domain)
+    skeleton = _confusable_skeleton(decoded).lower()
+
+    for owned in COMPANY_OWNED:
+        owned_lower = owned.lower()
+        if decoded.lower() == owned_lower:
+            continue  # identic dupa decodare - nu e homoglif, e chiar domeniul
+        if skeleton == owned_lower:
+            return str(owned)
+
+    return None
 
 
 def is_cybeready_simulation(parsed: ParsedEmail) -> bool:
@@ -159,87 +204,86 @@ def is_cybeready_simulation(parsed: ParsedEmail) -> bool:
     # Semnal 3: hostname de tracking in URL-uri (domeniu inregistrabil, nu substring!)
     tracking_hosts = {h.lower() for h in CYBEREADY_CONFIG.get("tracking_hostnames", [])}
     url_hosts = {urlparse(u).netloc.lower() for u in parsed.urls if u}
-    has_tracking_signal = any(
+    _has_tracking_signal = any(
         h == th or is_subdomain_of(h, th)
         for h in url_hosts for th in tracking_hosts
     )
-    # TODO(securitate, prioritate mare): un hostname de tracking singur da
-    # SIMULATION oricui. Vezi si return-ul de la finalul functiei.
-    # Ce e gresit: toate cele patru semnale intra in acelasi SAU, deci sunt
-    # tratate ca fiind la fel de puternice. Nu sunt. Un Message-ID sau un IP din
-    # Received sunt greu de falsificat; un URL in corpul mailului il pune oricine.
-    # Testat: attacker@totally-evil.tld cu un link catre https://inner.website/...
-    #   -> SIMULATION 1.0
-    # De ce e grav: inner.website e un domeniu generic, scris in
-    # config/cyberready.yaml, care e public in repo. Cine citeste repo-ul poate
-    # sa puna link-ul ala in phishing si sa primeasca automat raspunsul bland de
-    # "a fost doar o simulare". Comentariul din capul lui cyberready.yaml spune
-    # exact asta: un fals pozitiv aici e inacceptabil.
-    # Cum rezolvi: semnalul de tracking trebuie sa CONFIRME un expeditor deja
-    # plauzibil, nu sa decida singur. Cere fie domeniu CyberReady plus un semnal,
-    # fie doua semnale independente. Separa semnalele tari (msgid, ip) de cele
-    # slabe (url) in doua variabile, nu le lasa pe toate in acelasi SAU.
-    has_extra_signal = (
-        has_msgid_signal or has_auth_suffix_signal or has_ip_signal or has_tracking_signal
-    )
-    # Semnal 4: header propriu al platformei (X-CRPS, X-Virtual-MTA) 
+    has_strong_signal = has_msgid_signal or has_auth_suffix_signal or has_ip_signal
+    
     if is_cyberready_domain:
         yaml_domains = {str(d).lower().strip() for d in CYBEREADY_CONFIG.get("sender_domains", [])}
         is_sensitive = domain in yaml_domains or any(
             is_subdomain_of(domain, sd) for sd in yaml_domains
         )
         if is_sensitive:
-            return has_extra_signal
+            return has_strong_signal
         return True
 
-    # Fara domeniu confirmat (cazul 01 - forward inline, From e al colegului):
-    # cel putin un semnal independent de domeniu.
-    #
-    # BINE: partea asta chiar functioneaza. Testat, forward inline cu
-    # In-Reply-To: <...@mta1.cybereadysmtp.com> -> SIMULATION 1.0. Era partea grea.
-    #
-    # TODO(securitate): aici cade bug-ul cu tracking-ul de mai sus. Cand ajungi
-    # pe linia asta, un simplu link catre inner.website e suficient.
-    return has_extra_signal
+    return has_strong_signal
+
+def _check_display_name_mismatch(parsed: ParsedEmail, sender_domain: str) -> Evidence | None:
+    """Display-name pretinde compania sau un partener cunoscut, dar
+    domeniul real nu corespunde - clasicul From: "Banca X" <atacator@rau.tld>."""
+    display_name = (parsed.from_display_name or "").lower()
+    if not display_name:
+        return None
+
+    company_name_hints = COMPANY_CONFIG.get("company_name_hints", [])
+    for hint in company_name_hints:
+        hint_lower = str(hint).lower().strip()
+        if hint_lower and hint_lower in display_name:
+            claims_owned = sender_domain in COMPANY_OWNED or any(
+                is_subdomain_of(sender_domain, d) for d in COMPANY_OWNED
+            )
+            if not claims_owned:
+                return Evidence(
+                    code="DISPLAY_NAME_MISMATCH",
+                    severity=Severity.HIGH,
+                    description="Numele afișat sugerează compania proprie, dar domeniul expeditorului nu corespunde.",
+                    detail=defang(f"Display-name: {parsed.from_display_name}, domeniu real: {sender_domain}"),
+                )
+
+    return None
 
 
-# TODO(prioritate maxima): fisierul asta nu exista, deci toate seturile de mai jos
-# sunt goale, si odata cu ele o gramada de reguli devin cod mort.
-# Ce e gresit: config/company_domains.yaml e in .gitignore (corect, contine nume
-# de servere interne). In repo exista doar company_domains.example.yaml. Pe orice
-# clona noua si in CI, verificat:
-#   TRUSTED_PARTNERS = set()   COMPANY_OWNED  = set()
-#   MAIL_INFRA       = set()   HIGH_RISK_TLDS = set()
-# Adica regula de newsletter legitim (cazul 06), INTERNAL_DOMAIN_SPOOF,
-# LOOKALIKE_DOMAIN si HIGH_RISK_TLD nu se executa NICIODATA in CI. Tot ce s-a
-# scris in commit-ul e53d727 e cod mort acolo, si bug-urile marcate mai jos in
-# _check_domain_spoofing nu pot fi prinse de niciun test cat timp seturile sunt goale.
-# Cum rezolvi: in load_yaml_config, daca fisierul cerut nu exista, incearca
-# varianta .example cu acelasi nume si scrie un logger.warning ca s-a folosit
-# exemplul. Asa CI are date de lucru, iar pe VM fisierul real are prioritate.
-# Datele reale raman in afara git-ului.
-# FA PUNCTUL ASTA PRIMUL - transforma bug-urile din _check_domain_spoofing din
-# teoretice in testabile.
 COMPANY_CONFIG = load_yaml_config("company_domains.yaml")
 TRUSTED_PARTNERS = {d.lower().strip() for d in COMPANY_CONFIG.get("trusted_partners", [])}
+COMPANY_OWNED = {d.lower().strip() for d in COMPANY_CONFIG.get("owned_domains", [])}
+MAIL_INFRA = {h.lower().strip() for h in COMPANY_CONFIG.get("mail_infrastructure", [])}
+HIGH_RISK_TLDS = {t.lower().strip() for t in COMPANY_CONFIG.get("high_risk_tlds", [])}
+
+_SEVERITY_WEIGHTS = {
+    Severity.CRITICAL: 100,
+    Severity.HIGH: 40,
+    Severity.MEDIUM: 15,
+    Severity.LOW: 5,
+    Severity.INFO: 0,
+}
+
+_MALICIOUS_SCORE_THRESHOLD = 40
+
+
+def _evidence_score(evidence_list: list[Evidence]) -> int:
+    return sum(_SEVERITY_WEIGHTS[e.severity] for e in evidence_list)
+
 
 def analyze(parsed: ParsedEmail) -> Analysis:
     evidence_list: list[Evidence] = []
 
-    # 1. Verificare esec Autentificare (SPF/DKIM/DMARC Fail) -> MALICIOUS
-    auth_lower = parsed.auth_results.lower() if parsed.auth_results else ""
-    if "spf=fail" in auth_lower or "dkim=fail" in auth_lower or "dmarc=fail" in auth_lower:
+    # --- Excepții cu return timpuriu: alocare/categorie, nu scor de amenintare ---
+
+    # 0. SCREENSHOT_ONLY - nu exista continut de analizat, nimic de coroborat
+    if parsed.report_kind == ReportKind.SCREENSHOT_ONLY:
         evidence_list.append(
             Evidence(
-                code="AUTH_FAILURE",
-                severity=Severity.HIGH,
-                description="Verificarea autenticității e-mailului a eșuat (SPF/DKIM/DMARC).",
-                detail=defang(parsed.auth_results),
+                code="SCREENSHOT_ONLY",
+                severity=Severity.MEDIUM,
+                description="Raportul conține o captură de ecran și necesită revizuire manuală.",
             )
         )
-        return Analysis(verdict=Verdict.MALICIOUS, confidence=0.9, evidence=evidence_list)
+        return Analysis(verdict=Verdict.NEEDS_REVIEW, confidence=0.5, evidence=evidence_list)
 
-    # 2. Verificare SIMULATION (CyberReady Fingerprint)
+    # 1. CyberReady - fingerprint autoritativ, evaluat PRIMUL (comentariu original din config)
     if is_cybeready_simulation(parsed):
         from_addr = extract_email_address(parsed.from_address)
         evidence_list.append(
@@ -252,13 +296,32 @@ def analyze(parsed: ParsedEmail) -> Analysis:
         )
         return Analysis(verdict=Verdict.SIMULATION, confidence=1.0, evidence=evidence_list)
 
-    # 3. Verificare atasamente periculoase
+    auth_lower = parsed.auth_results.lower() if parsed.auth_results else ""
+    body_content = parsed.body_text or ""
+    subject_text = parsed.subject or ""
+    from_addr = extract_email_address(parsed.from_address)
+    sender_domain = from_addr.split("@")[-1].lower() if "@" in from_addr else ""
+    combined_text = f"{parsed.body_text or ''}\n{parsed.html_extracted_text or ''}"
+
+    # 2. Autentificare esuata
+    if "spf=fail" in auth_lower or "dkim=fail" in auth_lower or "dmarc=fail" in auth_lower:
+        evidence_list.append(
+            Evidence(
+                code="AUTH_FAILURE",
+                severity=Severity.HIGH,
+                description="Verificarea autenticității e-mailului a eșuat (SPF/DKIM/DMARC).",
+                detail=defang(parsed.auth_results),
+            )
+        )
+
+    # 3. Atasamente periculoase
     for att in parsed.attachments:
         filename = att.filename.lower()
-        has_double_ext = bool(_DOUBLE_EXT_REGEX and _DOUBLE_EXT_REGEX.search(filename))
         ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
+        has_double_ext_pattern = bool(_DOUBLE_EXT_REGEX and _DOUBLE_EXT_REGEX.search(filename))
+        is_double_ext_dangerous = has_double_ext_pattern and ext in SUSPECT_EXTENSIONS
 
-        if ext in SUSPECT_EXTENSIONS or has_double_ext:
+        if ext in SUSPECT_EXTENSIONS or is_double_ext_dangerous:
             evidence_list.append(
                 Evidence(
                     code="SUSPECT_ATTACHMENT",
@@ -267,98 +330,104 @@ def analyze(parsed: ParsedEmail) -> Analysis:
                     detail=defang(f"SHA256: {att.sha256}"),
                 )
             )
-            return Analysis(verdict=Verdict.MALICIOUS, confidence=0.95, evidence=evidence_list)
 
-    # 4. Verificare SCREENSHOT_ONLY
-    if parsed.report_kind == ReportKind.SCREENSHOT_ONLY:
+        if att.is_encrypted_archive:
+            evidence_list.append(
+                Evidence(
+                    code="ENCRYPTED_ARCHIVE",
+                    severity=Severity.HIGH,
+                    description=f"Atașament arhivă protejată cu parolă: {att.filename}. Tehnica evită scanarea automată de conținut.",
+                    detail=defang(f"SHA256: {att.sha256}"),
+                )
+            )
+
+    # 4. Reply-To / Return-Path mismatch
+    reply_to_domain = _domain_of(parsed.reply_to)
+    has_reply_to_mismatch = _domain_mismatch(reply_to_domain, sender_domain)
+    if has_reply_to_mismatch:
         evidence_list.append(
             Evidence(
-                code="SCREENSHOT_ONLY",
+                code="REPLY_TO_MISMATCH",
                 severity=Severity.MEDIUM,
-                description="Raportul conține o captură de ecran și necesită revizuire manuală.",
+                description="Adresa de Reply-To diferă de adresa expeditorului (From).",
+                detail=defang(f"From: {sender_domain}, Reply-To: {reply_to_domain}"),
             )
         )
-        return Analysis(verdict=Verdict.NEEDS_REVIEW, confidence=0.5, evidence=evidence_list)
 
-    body_content = parsed.body_text or ""
-    subject_text = parsed.subject or ""
-    from_addr = extract_email_address(parsed.from_address)
-    sender_domain = from_addr.split("@")[-1].lower() if "@" in from_addr else ""
+    return_path_domain = _domain_of(parsed.return_path)
+    has_return_path_mismatch = _domain_mismatch(return_path_domain, sender_domain)
+    if has_return_path_mismatch:
+        evidence_list.append(
+            Evidence(
+                code="RETURN_PATH_MISMATCH",
+                severity=Severity.LOW,
+                description="Return-Path nu corespunde cu adresa expeditorului (From).",
+                detail=defang(f"From: {sender_domain}, Return-Path: {return_path_domain}"),
+            )
+        )
 
-    #  spoofing / lookalike de domeniu propriu ---
-    # TODO(bug): aici orice evidenta intoarsa de _check_domain_spoofing devine
-    # MALICIOUS 0.9, indiferent de severitatea ei. Dar 5c construieste evidenta cu
-    # Severity.MEDIUM, deci un expeditor pe .online, fara niciun alt semnal, e
-    # condamnat doar pentru TLD. Testat: news@furnizor.online -> MALICIOUS 0.9.
-    # In plus blocul asta ruleaza INAINTE de regula 6 (partener de incredere) si
-    # inainte de 7 (SPAM), deci le taie pe amandoua.
-    # Cum rezolvi: TLD-ul e un indiciu slab, nu o dovada. Ori adaugi evidenta in
-    # evidence_list fara return si lasi fluxul sa continue, ori mapezi severitatea
-    # la verdict (CRITICAL/HIGH -> MALICIOUS, MEDIUM -> NEEDS_REVIEW).
-    # Regula de urmat peste tot in analizor: severitatea evidentei si verdictul
-    # trebuie sa fie corelate. Daca scrii Severity.MEDIUM, nu intoarce MALICIOUS 0.9.
+    # 5. Continut ascuns (informativ - nu are pondere in scor, vezi weight INFO=0)
+    has_hidden_content = (
+        any(char in combined_text for char in ["\u200b", "\u200c", "\u200d", "\u202e"])
+        or contains_hidden_content(parsed.raw_html)
+    )
+    if has_hidden_content:
+        evidence_list.append(
+            Evidence(
+                code="HIDDEN_CONTENT_DETECTED",
+                severity=Severity.INFO,
+                description="S-a detectat conținut ascuns (caractere zero-width sau stil care ascunde textul) în corpul e-mailului.",
+                detail=defang("Text ascuns eliminat automat înainte de trimiterea către model."),
+            )
+        )
+
+    # 6. Link text-vs-href mismatch
+    if parsed.suspicious_links:
+        examples = "; ".join(
+            f"text afișat «{l.text}» → duce la {defang(l.href)}"
+            for l in parsed.suspicious_links[:2]
+        )
+        evidence_list.append(
+            Evidence(
+                code="LINK_TEXT_HREF_MISMATCH",
+                severity=Severity.HIGH,
+                description="Textul afișat al unui link nu corespunde cu adresa reală către care duce.",
+                detail=examples,
+            )
+        )
+
+    # 7. Spoofing / lookalike / homoglif de domeniu propriu
     spoof_evidence = _check_domain_spoofing(parsed, sender_domain)
     if spoof_evidence:
         evidence_list.append(spoof_evidence)
-        return Analysis(verdict=Verdict.MALICIOUS, confidence=0.9, evidence=evidence_list)
 
-    # 5. Verificare Prompt Injection
-    # TODO(bug de logica): regula asta face exact invers decat cere cazul 08.
-    # corpus/expected/08_prompt_injection.yaml spune: "verdictul produs cu si fara
-    # textul ascuns trebuie sa fie identic". Ideea cerintei e ca textul ascuns sa
-    # NU poata influenta verdictul, in nicio directie. Regula de aici face din
-    # caracterele ascunse chiar MOTIVUL verdictului MALICIOUS - adica textul ascuns
-    # schimba verdictul, fix ce nu voia cerinta.
-    # Cazul 08 trebuie sa iasa MALICIOUS din semnalele de phishing de credentiale
-    # (link, domeniu, autentificare), iar injectia doar sa fie curatata inainte sa
-    # ajunga la model.
-    # Efect masurat: un newsletter legitim Microsoft cu UN SINGUR caracter
-    # zero-width in corp iese MALICIOUS 0.9 [PROMPT_INJECTION]. Caracterele
-    # zero-width si preheader-ele display:none sunt banale in mailurile de
-    # marketing, deci o sa ai o gramada de falsi pozitivi.
-    # A doua problema: textul ascuns nici macar nu ajunge aici. Vezi TODO-ul de la
-    # ramura text/html din parser (cauta "if not body_text_parts"). Testat pe un
-    # mail de forma cazului 08: textul de injectie nu a ajuns in body_text, iar
-    # verdictul a iesit NEEDS_REVIEW 0.5.
-    # Cum rezolvi: ai deja sanitize_for_model in triage/drafter/__init__.py, aia e
-    # unealta corecta si e deja folosita la construirea prompt-ului. Scoate regula
-    # asta ca sursa de verdict; daca vrei sa pastrezi urma, adauga evidenta
-    # informativa in evidence_list fara return.
-    if any(char in body_content for char in ["\u200b", "\u200c", "\u200d", "\u202e"]) or "display:none" in body_content.lower():
+    # 8. Display-name vs domeniu real
+    display_name_evidence = _check_display_name_mismatch(parsed, sender_domain)
+    if display_name_evidence:
+        evidence_list.append(display_name_evidence)
+
+    # 9. Semnale lexicale de continut (urgenta, cerere de credentiale)
+    content_signal_codes = _detect_content_signals(combined_text)
+    for code in content_signal_codes:
+        description = {
+            "URGENCY_LANGUAGE": "Textul folosește formulări de urgență artificială, tipice phishingului.",
+            "CREDENTIAL_REQUEST_LANGUAGE": "Textul cere confirmarea sau introducerea de date de autentificare.",
+        }[code]
         evidence_list.append(
-            Evidence(
-                code="PROMPT_INJECTION",
-                severity=Severity.HIGH,
-                description="Tentativă de prompt injection detectată prin caractere ascunse sau stiluri de afișare.",
-                detail=defang("Detectat conținut ascuns sau override de direcție în corpul e-mailului.")
-            )
+            Evidence(code=code, severity=Severity.LOW, description=description)
         )
-        return Analysis(verdict=Verdict.MALICIOUS, confidence=0.9, evidence=evidence_list)
 
-    # 6. Verificare Newsletter / Partener de încredere
+    # --- Categorii non-amenintare, evaluate separat de scor ---
+
     is_trusted_partner = sender_domain in TRUSTED_PARTNERS or any(
         is_subdomain_of(sender_domain, tp) for tp in TRUSTED_PARTNERS
     )
-
     has_no_explicit_fail = (
-        "spf=fail" not in auth_lower
-        and "dkim=fail" not in auth_lower
-        and "dmarc=fail" not in auth_lower
+        "spf=fail" not in auth_lower and "dkim=fail" not in auth_lower and "dmarc=fail" not in auth_lower
     )
     has_partner_newsletter_markers = "newsletter" in subject_text.lower() or "informare" in subject_text.lower()
+    is_legit_newsletter = is_trusted_partner and has_no_explicit_fail and has_partner_newsletter_markers
 
-    if is_trusted_partner and has_no_explicit_fail and has_partner_newsletter_markers:
-        evidence_list.append(
-            Evidence(
-                code="LEGIT_NEWSLETTER",
-                severity=Severity.LOW,
-                description="Newsletter legitim de la un partener de încredere (furnizor cunoscut).",
-                detail=defang(f"Expeditor: {from_addr}, Subiect: {subject_text}"),
-            )
-        )
-        return Analysis(verdict=Verdict.LEGITIMATE, confidence=0.85, evidence=evidence_list)
-
-    # 7. Verificare SPAM
     is_spam_report = parsed.report_kind == ReportKind.SPAM
     has_marketing_keywords = (
         "publicitate" in body_content.lower()
@@ -370,20 +439,40 @@ def analyze(parsed: ParsedEmail) -> Analysis:
         or "simpozion" in body_content.lower()
     )
     has_unsubscribe = "dezabonare" in body_content.lower() or "unsubscribe" in body_content.lower()
+    is_spam = is_spam_report or has_marketing_keywords or (has_unsubscribe and not is_trusted_partner)
 
-    if is_spam_report or has_marketing_keywords or (has_unsubscribe and not is_trusted_partner):
+    strict_auth_pass = "spf=pass" in auth_lower and "dkim=pass" in auth_lower and "dmarc=pass" in auth_lower
+
+    # --- Decizia finala: scorul de amenintare are prioritate asupra categoriilor blande ---
+
+    score = _evidence_score(evidence_list)
+
+    if score >= _MALICIOUS_SCORE_THRESHOLD:
+        return Analysis(verdict=Verdict.MALICIOUS, confidence=min(0.99, 0.6 + score / 200), evidence=evidence_list)
+
+    if is_legit_newsletter:
+        evidence_list.append(
+            Evidence(
+                code="LEGIT_NEWSLETTER",
+                severity=Severity.LOW,
+                description="Newsletter legitim de la un partener de încredere (furnizor cunoscut).",
+                detail=defang(f"Expeditor: {from_addr}, Subiect: {subject_text}"),
+            )
+        )
+        return Analysis(verdict=Verdict.LEGITIMATE, confidence=0.85, evidence=evidence_list)
+
+    if is_spam:
         evidence_list.append(
             Evidence(
                 code="REPORTED_AS_SPAM",
                 severity=Severity.LOW,
                 description="Mesajul este raportat ca fiind spam sau conține oferte promoționale/evenimente nesolicitate.",
-                detail=defang("Detectate elemente de marketing/spam fără risc direct de malware.")
+                detail=defang("Detectate elemente de marketing/spam fără risc direct de malware."),
             )
         )
         return Analysis(verdict=Verdict.SPAM, confidence=0.85, evidence=evidence_list)
 
-    # 8. Verificare stricta LEGITIMATE
-    if "spf=pass" in auth_lower and "dkim=pass" in auth_lower and "dmarc=pass" in auth_lower:
+    if strict_auth_pass and not has_reply_to_mismatch and not has_return_path_mismatch and score == 0:
         evidence_list.append(
             Evidence(
                 code="PASS_ALL_CHECKS",
@@ -393,7 +482,6 @@ def analyze(parsed: ParsedEmail) -> Analysis:
         )
         return Analysis(verdict=Verdict.LEGITIMATE, confidence=0.85, evidence=evidence_list)
 
-    # 9. Fallback Implicit -> NEEDS_REVIEW
     evidence_list.append(
         Evidence(
             code="INSUFFICIENT_EVIDENCE",
@@ -404,20 +492,11 @@ def analyze(parsed: ParsedEmail) -> Analysis:
     return Analysis(verdict=Verdict.NEEDS_REVIEW, confidence=0.5, evidence=evidence_list)
 
 
-# TODO: cele trei seturi sunt GOALE pe orice clona noua si in CI, pentru ca
-# company_domains.yaml nu exista in repo. Vezi TODO-ul mare de la
-# "COMPANY_CONFIG = load_yaml_config(...)". Cat timp sunt goale, toata functia
-# _check_domain_spoofing de mai jos e cod mort si nu o poate testa nimeni.
-COMPANY_OWNED = {d.lower().strip() for d in COMPANY_CONFIG.get("owned_domains", [])}
-MAIL_INFRA = {h.lower().strip() for h in COMPANY_CONFIG.get("mail_infrastructure", [])}
-HIGH_RISK_TLDS = {t.lower().strip() for t in COMPANY_CONFIG.get("high_risk_tlds", [])}
-
 def _check_domain_spoofing(parsed: ParsedEmail, sender_domain: str) -> Evidence | None:
-    # 5a. From pretinde un domeniu propriu, dar Received nu trece prin infra proprie
     claims_owned = sender_domain in COMPANY_OWNED or any(
         is_subdomain_of(sender_domain, d) for d in COMPANY_OWNED
     )
-    if claims_owned:
+    if claims_owned and parsed.received_chain and not parsed.from_extracted_from_body:
         received_text = " ".join(parsed.received_chain).lower()
         routed_internally = any(h in received_text for h in MAIL_INFRA)
         if not routed_internally:
@@ -428,35 +507,25 @@ def _check_domain_spoofing(parsed: ParsedEmail, sender_domain: str) -> Evidence 
                 detail=defang(f"Domeniu: {sender_domain}"),
             )
 
-    # 5b. Lookalike fata de domeniile proprii (Levenshtein simplu)
-    # TODO(bug, prioritate maxima): bucla asta marcheaza domeniile NOASTRE ca
-    # MALICIOUS. E cel mai grav fals pozitiv din tot analizorul.
-    # Ce e gresit: se sare peste comparatie doar daca domeniile sunt identice
-    # (sender_domain != owned). Dar domeniile proprii seamana intre ele. Cu lista
-    # din config (exemplu.ro, intern.exemplu.ro, exemplu.com), distanta
-    # Levenshtein intre "exemplu.com" si "exemplu.ro" este 2, deci trece pragul <= 2.
-    # Testat:
-    #   From ceo@exemplu.com (domeniu propriu, prin mx01.exemplu.com)  -> MALICIOUS 0.9
-    #   From hr@exemplu.ro   (domeniu propriu, prin mail1.exemplu.ro)  -> MALICIOUS 0.9
-    # Adica orice mail intern devine malitios.
-    # Cum rezolvi: lookalike are sens doar pentru domenii care NU sunt ale noastre.
-    # Ai deja claims_owned calculat mai sus in aceeasi functie - pune toata bucla
-    # sub "if not claims_owned:". Daca expeditorul e chiar pe un domeniu propriu,
-    # nu are cum sa fie un lookalike al domeniului propriu.
-    for owned in COMPANY_OWNED:
-        if sender_domain != owned and _levenshtein(sender_domain, owned) <= 2:
+    if not claims_owned:
+        # Homoglif / punycode - distanta vizuala zero, Levenshtein nu il prinde
+        homoglyph_target = _is_homoglyph_of_owned(sender_domain)
+        if homoglyph_target:
             return Evidence(
-                code="LOOKALIKE_DOMAIN",
-                severity=Severity.HIGH,
-                description=f"Domeniul expeditorului seamănă cu un domeniu propriu ({owned}), dar nu este identic.",
-                detail=defang(f"Domeniu raportat: {sender_domain}"),
+                code="HOMOGLYPH_DOMAIN",
+                severity=Severity.CRITICAL,
+                description=f"Domeniul expeditorului folosește caractere vizual identice sau punycode pentru a imita un domeniu propriu ({homoglyph_target}).",
+                detail=defang(f"Domeniu raportat: {sender_domain} (decodat: {_domain_to_unicode(sender_domain)})"),
             )
+        for owned in COMPANY_OWNED:
+            if _levenshtein(sender_domain, owned) <= 2:
+                return Evidence(
+                    code="LOOKALIKE_DOMAIN",
+                    severity=Severity.HIGH,
+                    description=f"Domeniul expeditorului seamănă cu un domeniu propriu ({owned}), dar nu este identic.",
+                    detail=defang(f"Domeniu raportat: {sender_domain}"),
+                )
 
-    # 5c. TLD cu risc ridicat
-    # TODO(bug): evidenta asta e MEDIUM, dar apelantul din analyze() o transforma
-    # in MALICIOUS 0.9. Vezi TODO-ul de la "spoof_evidence = _check_domain_spoofing".
-    # Un TLD e un indiciu slab, nu o dovada - nu poti condamna un expeditor doar
-    # pentru ca e pe .online.
     tld = "." + sender_domain.rsplit(".", 1)[-1] if "." in sender_domain else ""
     if tld in HIGH_RISK_TLDS:
         return Evidence(
@@ -478,3 +547,39 @@ def _levenshtein(a: str, b: str) -> int:
             curr.append(min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + (ca != cb)))
         prev = curr
     return prev[-1]
+
+_URGENCY_PHRASES_RO = [
+    "actiune necesara", "acțiune necesară", "cont suspendat", "cont blocat",
+    "in 24 de ore", "în 24 de ore", "expira astazi", "expiră astăzi",
+    "ultima notificare", "ultimă notificare", "raspundeti imediat",
+    "răspundeți imediat", "verificare urgenta", "verificare urgentă",
+]
+_URGENCY_PHRASES_EN = [
+    "act now", "account suspended", "account locked", "within 24 hours",
+    "expires today", "final notice", "urgent action required", "verify immediately",
+]
+
+_CREDENTIAL_REQUEST_PHRASES_RO = [
+    "introduceti parola", "introduceți parola", "confirmati datele",
+    "confirmați datele", "actualizati contul", "actualizați contul",
+    "verificati identitatea", "verificați identitatea",
+]
+_CREDENTIAL_REQUEST_PHRASES_EN = [
+    "enter your password", "confirm your details", "update your account",
+    "verify your identity", "login to confirm",
+]
+
+
+def _detect_content_signals(text: str) -> list[str]:
+    """Semnale lexicale de continut - pondere mica, coroboranta (sectiunea 6.3).
+    Intoarce lista de coduri gasite, nu decide singura verdictul."""
+    text_lower = text.lower()
+    found = []
+
+    if any(p in text_lower for p in _URGENCY_PHRASES_RO + _URGENCY_PHRASES_EN):
+        found.append("URGENCY_LANGUAGE")
+
+    if any(p in text_lower for p in _CREDENTIAL_REQUEST_PHRASES_RO + _CREDENTIAL_REQUEST_PHRASES_EN):
+        found.append("CREDENTIAL_REQUEST_LANGUAGE")
+
+    return found

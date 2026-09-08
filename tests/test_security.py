@@ -1,6 +1,6 @@
 import stat
 from pathlib import Path
-from triage.storage import sanitize_filename, save_secure_file 
+from triage.secure_files import sanitize_filename, save_secure_file 
 
 def test_sanitize_filename_prevents_path_traversal() -> None:
     assert sanitize_filename("../../etc/passwd") == "passwd"

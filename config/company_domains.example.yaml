@@ -47,3 +47,6 @@ high_risk_tlds:
 # NOTA: notificaton.online, domeniul platformei de simulare, cade si el sub
 # .online. De asta fingerprint-ul CyberReady se evalueaza PRIMUL si opreste
 # restul semnalelor - vezi ordinea din src/triage/analyzer/__init__.py.
+
+company_name_hints:
+- "Compania X"     

@@ -8,12 +8,15 @@ Testele care au voie sa vorbeasca cu Ollama pe loopback folosesc marker-ul
 from __future__ import annotations
 
 from pathlib import Path
-
 import pytest
 from pytest_socket import enable_socket, socket_allow_hosts  # type: ignore[import-untyped]
 
 CORPUS = Path(__file__).parent.parent / "corpus" / "eml"
 
+requires_corpus = pytest.mark.skipif(
+    not list(CORPUS.glob("*.eml")),
+    reason="corpus/eml/ e gol - vezi corpus/README.md pentru cum il aduci",
+)
 
 @pytest.fixture(autouse=True)
 def _allow_ollama_only_when_marked(request: pytest.FixtureRequest) -> None:

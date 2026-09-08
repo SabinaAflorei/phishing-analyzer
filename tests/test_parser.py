@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 # Modifică importul către fișierul unde se află parse_report
 from triage.parser import parse_report 
 from triage.parser import extract_forwarded_headers
+import struct
 
 # Schimbă cale_catre_un_mail.eml cu un fișier real din folderul tău de e-mailuri/teste
 eml_path = Path("./corpus/eml/09_malformed_encoding.eml") 
@@ -64,4 +65,18 @@ if eml_path.exists():
 else:
     print(f"Fișierul {eml_path} nu a fost găsit pentru testare!")
 
-    
+def _fake_zip_bytes(encrypted: bool) -> bytes:
+    flags = 0x0001 if encrypted else 0x0000
+    header = b"PK\x03\x04" + b"\x14\x00" + struct.pack("<H", flags) + b"\x00" * 22
+    return header
+
+
+def test_zip_is_encrypted_detects_flag():
+    from triage.parser import _zip_is_encrypted
+    assert _zip_is_encrypted(_fake_zip_bytes(encrypted=True)) is True
+    assert _zip_is_encrypted(_fake_zip_bytes(encrypted=False)) is False
+
+
+def test_zip_is_encrypted_non_zip_returns_false():
+    from triage.parser import _zip_is_encrypted
+    assert _zip_is_encrypted(b"not a zip file") is False    

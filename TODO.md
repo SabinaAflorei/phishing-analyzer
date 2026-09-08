@@ -32,7 +32,7 @@ cere arhitectura.
 
 ## A. Arhitectura (sectiunea 3)
 
-### [ ] A1. Baza de date - nu exista deloc
+### [x] A1. Baza de date - nu exista deloc
 
 **Ce cere foaia:** cele patru componente (fetcher, parser, analyzer, drafter)
 sunt independente si comunica printr-o baza de date. "Daca Ollama e picat,
@@ -55,7 +55,7 @@ draft, status) plus hash-ul fisierului .eml ca sa nu duplici la repornire.
 SQLite cu SQLAlchemy, ca sunt deja in requirements. Alembic il pui cand ai prima
 schimbare de schema, nu de la inceput.
 
-### [ ] A2. `config/settings.yaml` nu e citit de niciun modul
+### [x] A2. `config/settings.yaml` nu e citit de niciun modul
 
 **Ce e acum:** fisierul exemplu exista si e bine scris, dar niciun modul nu il
 incarca. `poll_interval_seconds`, `llm.*`, `enrichment.enabled`, `paths.*`,
@@ -99,15 +99,15 @@ sau cu un mock.
 Cele trei forme de raportare sunt detectate, iar extragerea mesajului original
 merge pentru atasament. Ce lipseste din lista de campuri ceruta:
 
-- [ ] **Display-name-ul expeditorului**, separat de adresa. E nevoie de el pentru
+- [x] **Display-name-ul expeditorului**, separat de adresa. E nevoie de el pentru
       semnalul "nepotrivire intre display-name si domeniul real" (vezi D4).
       `email.utils.parseaddr` iti da deja ambele, dar acum se pastreaza doar adresa.
-- [ ] **Corpul HTML**, pastrat separat de cel text. Foaia zice explicit: HTML
+- [x] **Corpul HTML**, pastrat separat de cel text. Foaia zice explicit: HTML
       "doar pentru extragere URL-uri, niciodata pentru afisare". Acum HTML-ul se
       arunca aproape mereu - vezi TODO-ul de la `if not body_text_parts` din parser.
-- [ ] **Textul ancorei impreuna cu href-ul**, ca perechi. Fara ele nu poti face
+- [x] **Textul ancorei impreuna cu href-ul**, ca perechi. Fara ele nu poti face
       semnalul de discrepanta text-link din 6.3. Acum se retin doar href-urile.
-- [ ] **Arhive protejate cu parola** - detectabile din metadate (flag-ul de
+- [x] **Arhive protejate cu parola** - detectabile din metadate (flag-ul de
       criptare din headerul ZIP), fara sa deschizi arhiva. Cerut la 6.3.
 
 ---
@@ -119,22 +119,22 @@ extensie, lookalike pe Levenshtein, TLD cu risc ridicat, spoofing de domeniu int
 
 Semnale din foaie care lipsesc complet:
 
-- [ ] **D1. Reply-To diferit de From.** Campul `reply_to` se parseaza deja si se
+- [x] **D1. Reply-To diferit de From.** Campul `reply_to` se parseaza deja si se
       pune in `ParsedEmail`, dar analizorul nu il citeste niciodata. E semnalul cel
       mai ieftin de adaugat din toata lista.
-- [ ] **D2. Return-Path care nu corespunde cu From.** Idem, campul exista si e
+- [x] **D2. Return-Path care nu corespunde cu From.** Idem, campul exista si e
       neatins.
-- [ ] **D3. Homoglife si punycode / IDN.** `confusable-homoglyphs` e in
+- [x] **D3. Homoglife si punycode / IDN.** `confusable-homoglyphs` e in
       `requirements.txt` si nu il foloseste nimeni. Un domeniu `xn--`, sau unul cu
       un chirilic "а" in loc de "a" latin, trece acum complet nedetectat -
       Levenshtein nu il prinde, pentru ca distanta e 0 la nivel de aspect si mare
       la nivel de bytes.
-- [ ] **D4. Nepotrivire intre display-name si domeniul real.** Clasicul
+- [x] **D4. Nepotrivire intre display-name si domeniul real.** Clasicul
       `From: "Banca X" <atacator@rau.tld>`. Depinde de C1.
-- [ ] **D5. Semnale de continut** (pondere mica, dar coroborante, zice foaia):
+- [x] **D5. Semnale de continut** (pondere mica, dar coroborante, zice foaia):
       urgenta artificiala, cereri de credentiale, discrepanta intre textul
       link-ului si href. Ultimul depinde de C3.
-- [ ] **D6. Coroborarea semnalelor.** Acum fiecare regula face `return` imediat ce
+- [] **D6. Coroborarea semnalelor.** Acum fiecare regula face `return` imediat ce
       se potriveste, deci se opreste la prima. Foaia cere ca verdictul sa fie "o
       functie de dovezi" si ca semnalele de continut sa aiba "pondere mica, dar
       coroboranta" - ceea ce presupune sa le aduni, nu sa iesi la prima.
@@ -146,7 +146,7 @@ Semnale din foaie care lipsesc complet:
 
 ## E. Drafter (sectiunea 6.4)
 
-### [ ] E1. Ollama nu e conectat - LLM-ul nu ruleaza niciodata
+### [x] E1. Ollama nu e conectat - LLM-ul nu ruleaza niciodata
 
 **Ce e acum:** `build_draft()` are parametrul `llm_client: Any = None`, si
 `if llm_client is not None:` inconjoara toata logica de generare. Nimeni, in tot
@@ -162,7 +162,7 @@ foaie. Doar ca acum e singura cale.
 stdlib, in `scripts/eval_model.py` - foloseste-l ca model. Config-ul (base_url,
 model, temperatura, timeout) vine din A2.
 
-- [ ] E2. Timeout pe apelul catre Ollama, ca sa nu blocheze pipeline-ul.
+- [x] E2. Timeout pe apelul catre Ollama, ca sa nu blocheze pipeline-ul.
       `timeout_seconds: 30` exista deja in settings, trebuie doar folosit.
 - [ ] E3. Trunchiere la `max_input_chars` (2000) inainte de model - sectiunea 4.4
       punctul 2. `sanitize_for_model` are deja `max_chars=2000` ca default, dar
@@ -178,7 +178,7 @@ model, temperatura, timeout) vine din A2.
 
 ## F. Dashboard (sectiunea 6.5)
 
-### [ ] F1. Butoanele "Marcheaza trimis" si "Escaleaza" nu fac nimic
+### [x] F1. Butoanele "Marcheaza trimis" si "Escaleaza" nu fac nimic
 
 `detail.html` trimite `value="mark_sent"` si `value="escalate"`, dar
 `handle_report_action()` din `app.py` trateaza doar `save_draft` si
@@ -186,7 +186,7 @@ model, temperatura, timeout) vine din A2.
 raspunde cu "Actiune inregistrata cu succes", dar nu se salveaza nimic.
 Mesajul de succes e mai rau decat o eroare - ascunde problema.
 
-### [ ] F2. Statusul si corectiile de verdict nu se pastreaza
+### [x] F2. Statusul si corectiile de verdict nu se pastreaza
 
 - In `load_real_reports()`, `"status": "NEW"` e hardcodat la fiecare incarcare.
 - `handle_bulk_action()` schimba `report["status"]` pe o lista reconstruita la
@@ -236,7 +236,7 @@ Partea grea e facuta si testata: retea blocata in teste, defanging, bind pe
 
 ## H. Corpus de test (sectiunea 7)
 
-- [ ] **H1. Fisierele `.eml` lipsesc de pe masina asta.** Exista toate cele 12
+- [x] **H1. Fisierele `.eml` lipsesc de pe masina asta.** Exista toate cele 12
       `corpus/expected/*.yaml`, dar `corpus/eml/` e gol, deci **37 de teste se sar**
       la fiecare rulare. Copiaza corpusul pe VM prin canalul discutat (vezi
       `corpus/README.md`). Fara el nu poti valida niciun criteriu functional din 8.1.

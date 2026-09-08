@@ -11,7 +11,7 @@ from triage.analyzer import analyze
 from triage.defang import defang
 from triage.drafter import build_draft
 from triage.parser import parse_report
-
+from triage.settings import get_ollama_client, llm_enabled
 
 def process_eml(file_path: Path, output_json: bool = False) -> int:
     """Procesează un fișier .eml prin tot pipeline-ul de triaj."""
@@ -34,6 +34,7 @@ def process_eml(file_path: Path, output_json: bool = False) -> int:
     draft_text = build_draft(
         analysis=analysis_result,
         reporter_name=reporter_name,
+        llm_client=get_ollama_client() if llm_enabled() else None,
     )
 
     #convertire obiecte pentru lizibilitate JSON

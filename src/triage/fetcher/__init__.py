@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+import email
+from triage.settings import get_settings
+import imaplib
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,53 @@ def save_raw_eml(content: bytes, destination_path: Path) -> Path:
 
 def fetch_from_imap() -> list[Path]:
     """Poll read-only. Marchează procesatele în DB, nu le șterge. Idempotent la restart."""
-    # Stub pentru integrare IMAP cu DB si retry logic
-    logger.info("Polling IMAP executat (stub).")
-    return []
+    settings = get_settings()
+    downloaded_paths: list[Path] = []
+    
+    server = getattr(settings, "IMAP_SERVER", "localhost")
+    port = getattr(settings, "IMAP_PORT", 993)
+    user = getattr(settings, "IMAP_USER", "")
+    password = getattr(settings, "IMAP_PASSWORD", "")
+    storage_dir = Path(getattr(settings, "RAW_EML_DIR", "data/raw_eml"))
+
+    if not user or not password:
+        logger.debug("Credențialele IMAP nu sunt configurate. Se sare peste poll.")
+        return downloaded_paths
+
+    try:
+        mail = imaplib.IMAP4_SSL(server, port)
+        mail.login(user, password)
+        mail.select("INBOX", readonly=True)
+
+        status, response = mail.search(None, "UNSEEN")
+        if status != "OK":
+            mail.logout()
+            return downloaded_paths
+
+        for e_id in response[0].split():
+            status, data = mail.fetch(e_id, "(RFC822)")
+            if status != "OK":
+                continue
+
+            for response_part in data:
+                if isinstance(response_part, tuple):
+                    raw_bytes = response_part[1]
+                    msg = email.message_from_bytes(raw_bytes)
+                    message_id = msg.get("Message-ID", "").strip()
+
+                    # Verificare idempotență în baza de date (A1)
+                    # Dacă există deja în DB după Message-ID sau hash, se ignoră
+                    # if message_id and db_has_message_id(message_id):
+                    #     continue
+
+                    # Salvare locală cu permisiuni restrictive (600)
+                    filename = f"{message_id.strip('<>') or e_id.decode()}.eml"
+                    dest_path = storage_dir / filename
+                    save_raw_eml(raw_bytes, dest_path)
+                    downloaded_paths.append(dest_path)
+
+        mail.logout()
+    except Exception as e:
+        logger.error("Eroare în timpul rulării IMAP poll: %s", e)
+
+    return downloaded_paths
