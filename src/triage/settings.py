@@ -64,6 +64,18 @@ class EnrichmentSettings(BaseModel):
     strip_recipient_tokens: bool = True
 
 
+class FetcherSettings(BaseModel):
+    """Cat de insistent e poll-ul cand mailbox-ul nu raspunde.
+
+    Valorile stau in config pentru ca depind de server, nu de cod: un IMAP
+    corporativ cu rate limiting are nevoie de asteptari mai lungi decat unul
+    de test. Asteptarea se dubleaza la fiecare incercare.
+    """
+
+    imap_retry_attempts: int = 3
+    imap_retry_backoff_seconds: float = 2.0
+
+
 class DashboardSettings(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8000
@@ -113,6 +125,7 @@ class Settings(BaseModel):
     enrichment: EnrichmentSettings = Field(default_factory=EnrichmentSettings)
     dashboard: DashboardSettings = Field(default_factory=DashboardSettings)
     imap: ImapSettings = Field(default_factory=ImapSettings)
+    fetcher: FetcherSettings = Field(default_factory=FetcherSettings)
 
 
 @lru_cache(maxsize=1)

@@ -1,8 +1,8 @@
 """Scriere sigura de fisiere pe disc: nume curatat, permisiuni 0600.
 
-Perechea lui e src/triage/dashboard/storage.py, care tine feedback-ul si
-corectiile de verdict. Cele doua nu au nimic in comun in afara cuvantului
-"storage" din numele vechi al acestui fisier - de asta s-a redenumit.
+Numele vechi era "storage", ceea ce il confunda cu stocarea feedback-ului
+din dashboard. Aceea a ajuns in db.py, iar fisierul asta s-a redenumit dupa
+ce face: scriere sigura de fisiere.
 """
 
 import os

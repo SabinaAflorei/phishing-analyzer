@@ -199,7 +199,11 @@ def ingest_imap(*, settings: Settings | None = None) -> IngestResult:
     llm_client = _llm_for_run(cfg)
     result = IngestResult()
 
-    for message in fetch_from_imap(cfg.imap):
+    for message in fetch_from_imap(
+        cfg.imap,
+        retries=cfg.fetcher.imap_retry_attempts,
+        backoff_seconds=cfg.fetcher.imap_retry_backoff_seconds,
+    ):
         try:
             destination = cfg.paths.raw_eml_dir / f"{message.sha256}.eml"
             if not destination.exists():

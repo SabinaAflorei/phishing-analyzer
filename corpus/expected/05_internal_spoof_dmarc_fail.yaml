@@ -9,6 +9,8 @@ source: sintetic
 must_contain_evidence:
   - AUTH_FAILURE
   - INTERNAL_DOMAIN_SPOOF
+  - REPLY_TO_MISMATCH
+  - RETURN_PATH_MISMATCH
 
 notes: |
   Spoofing de domeniu intern (fraudarea directorului general). From pretinde

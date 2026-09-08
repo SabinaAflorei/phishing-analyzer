@@ -355,7 +355,7 @@ def test_ingestia_din_imap_salveaza_eml_ul_brut_si_raportul(
     from triage.settings import ImapSettings, PathSettings, Settings
 
     mesaje = [ImapMessage(uid="1", raw=PHISHING), ImapMessage(uid="2", raw=SIMULARE)]
-    monkeypatch.setattr("triage.fetcher.fetch_from_imap", lambda _: mesaje)
+    monkeypatch.setattr("triage.fetcher.fetch_from_imap", lambda _, **__: mesaje)
 
     settings = Settings(
         source="imap",
@@ -381,7 +381,7 @@ def test_al_doilea_poll_nu_reproceseaza(tmp_path: Path, monkeypatch: pytest.Monk
     from triage.settings import ImapSettings, PathSettings, Settings
 
     monkeypatch.setattr(
-        "triage.fetcher.fetch_from_imap", lambda _: [ImapMessage(uid="1", raw=PHISHING)]
+        "triage.fetcher.fetch_from_imap", lambda _, **__: [ImapMessage(uid="1", raw=PHISHING)]
     )
     settings = Settings(
         source="imap",
@@ -431,3 +431,32 @@ def test_ollama_oprit_din_config_nu_se_probeaza(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr("triage.llm.OllamaClient.available", nu_trebuie_chemat)
     assert _llm_for_run(Settings(llm=LLMSettings(enabled=False))) is None
+
+
+def test_retry_ul_imap_vine_din_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Knob-ul de retry chiar ajunge la fetcher.
+
+    Fara testul asta, `fetcher:` din settings.yaml poate sta acolo ani de zile
+    fara sa fie citit de nimeni: pydantic ignora in tacere cheile in plus, deci
+    o valoare pusa de un operator nu ar schimba nimic si nimic nu ar reclama.
+    """
+    from triage.pipeline import ingest_imap
+    from triage.settings import FetcherSettings, ImapSettings, PathSettings, Settings
+
+    primite: dict[str, object] = {}
+
+    def _spion(_imap: object, **kwargs: object) -> list[object]:
+        primite.update(kwargs)
+        return []
+
+    monkeypatch.setattr("triage.fetcher.fetch_from_imap", _spion)
+
+    settings = Settings(
+        source="imap",
+        paths=PathSettings(raw_eml_dir=tmp_path / "brute"),
+        imap=ImapSettings(host="imap.exemplu.ro", user="u", app_password="p"),
+        fetcher=FetcherSettings(imap_retry_attempts=7, imap_retry_backoff_seconds=1.5),
+    )
+    ingest_imap(settings=settings)
+
+    assert primite == {"retries": 7, "backoff_seconds": 1.5}

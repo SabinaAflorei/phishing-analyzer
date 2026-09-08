@@ -9,6 +9,7 @@ source: sintetic
 must_contain_evidence:
   - AUTH_FAILURE
   - HIDDEN_TEXT
+  - ARTIFICIAL_URGENCY
 
 notes: |
   Phishing de credentiale cu tentativa de prompt injection. Instructiunile
