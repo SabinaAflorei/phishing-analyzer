@@ -32,7 +32,7 @@ cu verdicte. Oprești serverul cu `Ctrl+C`.
 Dacă vrei să verifici că totul e în regulă înainte:
 
 ```bash
-make test       # 359 de teste, rețeaua blocată
+make test       # 393 de teste, rețeaua blocată
 ```
 
 ### Ce face `make setup`
@@ -105,7 +105,6 @@ Din `make`:
 | `make run` | dashboard pe `127.0.0.1:8000` |
 | `make test` | testele, cu rețeaua blocată |
 | `make ci` | ruff + mypy + teste — tot ce trebuie verde înainte de PR |
-| `make status` | panou de progres → `build/status.html` |
 | `make clean` | șterge cache-urile și `build/` |
 
 Direct din CLI (după `make setup`, binarul e în `.venv/bin/triage`):
@@ -250,7 +249,6 @@ Criteriul de oprire e în script: peste 30s la cald înseamnă că modelul nu
 ```bash
 make ci          # ruff + mypy + pytest, tot ce trebuie verde înainte de PR
 make test        # doar testele
-make status      # panou de progres -> build/status.html
 ```
 
 Deciziile de arhitectură sunt în `docs/decisions/`. Fiecare spune ce s-a decis,

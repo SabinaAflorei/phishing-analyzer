@@ -17,7 +17,6 @@ from triage.msg_convert import (
     looks_like_msg,
     looks_like_rfc822,
     msg_bytes_to_eml,
-    to_eml,
 )
 
 EML = b"From: a@exemplu.ro\nTo: b@exemplu.ro\nSubject: test\n\nCorp.\n"
@@ -51,7 +50,9 @@ def test_liniile_goale_de_la_inceput_se_sar() -> None:
 
 
 def test_prima_linie_de_mbox_e_acceptata() -> None:
-    assert looks_like_rfc822(b"From cineva@exemplu.ro Mon Jan 1 00:00:00 2026\nSubject: x\n") is True
+    assert (
+        looks_like_rfc822(b"From cineva@exemplu.ro Mon Jan 1 00:00:00 2026\nSubject: x\n") is True
+    )
 
 
 def test_ce_nu_e_email_nu_trece() -> None:
@@ -76,10 +77,6 @@ def test_detect_format() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_to_eml_lasa_eml_ul_neatins() -> None:
-    assert to_eml(EML) is EML
-
-
 def test_conversia_produce_un_mesaj_analizabil() -> None:
     from triage.parser import parse_report
 
@@ -95,11 +92,6 @@ def test_conversia_e_determinista() -> None:
     """Boundary-uri dintr-un contor, nu random: acelasi .msg -> acelasi octet."""
     raw = _un_msg()
     assert msg_bytes_to_eml(raw) == msg_bytes_to_eml(raw)
-
-
-def test_to_eml_converteste_msg_ul() -> None:
-    raw = _un_msg()
-    assert to_eml(raw) == msg_bytes_to_eml(raw)
 
 
 def test_msg_stricat_ridica_eroare() -> None:

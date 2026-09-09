@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 from confusable_homoglyphs import confusables
 
 from triage.config import load_yaml_config, require_keys
-from triage.defang import defang
+from triage.defang import HIDDEN_STYLE_RE, INVISIBLE_CHARS_RE, defang
 from triage.domains import is_subdomain_of, registered_domain
 from triage.parser import ParsedEmail, ReportKind
 from triage.verdicts import Analysis, Evidence, Severity, Verdict
@@ -255,14 +255,6 @@ MARKETING_RE = re.compile(
 
 UNSUBSCRIBE_RE = re.compile(r"(dezabon|unsubscribe|opt[- ]?out)", re.IGNORECASE)
 
-# Text ascuns in HTML: alb pe alb, 1px, display:none, vizibilitate zero.
-HIDDEN_STYLE_RE = re.compile(
-    r"(display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*[01](\.\d+)?px|"
-    r"opacity\s*:\s*0(\.0+)?\b|color\s*:\s*#f{3,6}\b)",
-    re.IGNORECASE,
-)
-INVISIBLE_CHARS = ("​", "‌", "‍", "‮", "⁠", "﻿")
-
 # Un token care arata a domeniu, folosit in textul ancorei sau in display-name.
 DOMAIN_TOKEN_RE = re.compile(r"\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,})\b", re.I)
 
@@ -472,17 +464,17 @@ def _domain_evidence(parsed: ParsedEmail) -> list[Evidence]:
         and not parsed.headers_from_body
         and not _originated_internally(parsed.received_chain)
     ):
-            found.append(
-                Evidence(
-                    code="INTERNAL_DOMAIN_SPOOF",
-                    severity=Severity.CRITICAL,
-                    description=(
-                        "Expeditorul pretinde un domeniu propriu, dar mesajul nu a trecut "
-                        "prin infrastructura de mail internă."
-                    ),
-                    detail=defang(f"Domeniu: {sender_domain}"),
-                )
+        found.append(
+            Evidence(
+                code="INTERNAL_DOMAIN_SPOOF",
+                severity=Severity.CRITICAL,
+                description=(
+                    "Expeditorul pretinde un domeniu propriu, dar mesajul nu a trecut "
+                    "prin infrastructura de mail internă."
+                ),
+                detail=defang(f"Domeniu: {sender_domain}"),
             )
+        )
 
     # 5b. Lookalike - are sens NUMAI pentru domenii care nu sunt ale noastre.
     # Domeniile proprii seamana intre ele: distanta dintre "exemplu.com" si
@@ -615,7 +607,7 @@ def _hidden_text_evidence(parsed: ParsedEmail) -> list[Evidence]:
     Curatarea reala se face in `sanitize_for_model`, inainte ca textul sa ajunga
     la model. Aici doar lasam urma pentru analist.
     """
-    has_invisible = any(ch in parsed.body_text for ch in INVISIBLE_CHARS)
+    has_invisible = bool(INVISIBLE_CHARS_RE.search(parsed.body_text))
     has_hidden_style = bool(HIDDEN_STYLE_RE.search(parsed.body_html))
     if not (has_invisible or has_hidden_style):
         return []
@@ -776,10 +768,6 @@ def score_of(evidence: list[Evidence]) -> float:
 
 def _decide(evidence: list[Evidence]) -> Analysis:
     codes = {ev.code for ev in evidence}
-
-    if "CYBEREADY_SIMULATION" in codes:
-        return Analysis(verdict=Verdict.SIMULATION, confidence=1.0, evidence=evidence)
-
     score = score_of(evidence)
 
     if score >= MALICIOUS_THRESHOLD:

@@ -1,4 +1,8 @@
-"""Client minimal peste Ollama. Doar stdlib, doar loopback.
+"""Client minimal peste serverul local de model. Doar stdlib, doar loopback.
+
+Doua runtime-uri, acelasi contract (`generate` + `available`): Ollama pe
+`/api/generate` si orice server cu API OpenAI (llama.cpp, vLLM, LM Studio) pe
+`/v1/chat/completions`. Transportul e scris o singura data, in `_request_json`.
 
 Modelul NU decide verdictul. Verdictul e produs de analizorul determinist, iar
 modelul doar imbraca dovezile in text romanesc. Daca modelul e picat, lent sau
@@ -25,11 +29,38 @@ logger = logging.getLogger(__name__)
 
 
 class OllamaUnavailable(RuntimeError):
-    """Ollama e picat, lent sau a raspuns altceva decat ne asteptam."""
+    """Serverul de model e picat, lent sau a raspuns altceva decat ne asteptam."""
+
+
+# Un singur loc unde se face request-ul si unde se prind erorile. Cei doi clienti
+# difera doar prin ruta, corpul cererii si campul din care scot textul; transportul
+# era copiat de doua ori, cu aceeasi lista de exceptii scrisa in ambele locuri.
+_NETWORK_ERRORS = (
+    urllib.error.URLError,
+    http.client.HTTPException,
+    TimeoutError,
+    OSError,
+    json.JSONDecodeError,
+)
+
+
+def _request_json(url: str, timeout: int, payload: dict[str, Any] | None = None) -> Any:
+    """GET (fara payload) sau POST JSON. Orice esec devine OllamaUnavailable."""
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    request = urllib.request.Request(  # noqa: S310 - loopback, validat in settings
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"} if data else {},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            return json.loads(response.read())
+    except _NETWORK_ERRORS as err:
+        raise OllamaUnavailable(str(err)) from err
 
 
 class OllamaClient:
-    """Un singur apel: `generate`. Semnatura e cea pe care o cheama build_draft."""
+    """Un singur apel: `generate`. Semnatura e cea pe care o cheama drafter-ul."""
 
     def __init__(
         self,
@@ -43,38 +74,15 @@ class OllamaClient:
         self.timeout_seconds = timeout_seconds
         self.temperature = temperature
 
-    def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        request = urllib.request.Request(  # noqa: S310 - loopback, validat in settings
-            f"{self.base_url}{path}",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        try:
-            with urllib.request.urlopen(  # noqa: S310
-                request, timeout=self.timeout_seconds
-            ) as response:
-                body = json.loads(response.read())
-        except (
-            urllib.error.URLError,
-            http.client.HTTPException,
-            TimeoutError,
-            OSError,
-            json.JSONDecodeError,
-        ) as err:
-            raise OllamaUnavailable(str(err)) from err
-
-        if not isinstance(body, dict):
-            raise OllamaUnavailable(f"Raspuns neasteptat de la Ollama: {type(body).__name__}")
-        return body
-
     def generate(self, system_prompt: str, prompt: str, temperature: float | None = None) -> str:
         """Textul generat. Ridica OllamaUnavailable la orice problema.
 
         `timeout_seconds` e obligatoriu si vine din config: fara el, un model
         blocat ar tine pipeline-ul de ingestie pe loc la nesfarsit.
         """
-        body = self._post(
-            "/api/generate",
+        body = _request_json(
+            f"{self.base_url}/api/generate",
+            self.timeout_seconds,
             {
                 "model": self.model,
                 "system": system_prompt,
@@ -87,14 +95,14 @@ class OllamaClient:
                 },
             },
         )
+        if not isinstance(body, dict):
+            raise OllamaUnavailable(f"Raspuns neasteptat de la Ollama: {type(body).__name__}")
         return str(body.get("response", "")).strip()
 
     def available(self) -> bool:
         """Ruleaza Ollama si are modelul cerut? Nu arunca niciodata."""
         try:
-            request = urllib.request.Request(f"{self.base_url}/api/tags")  # noqa: S310
-            with urllib.request.urlopen(request, timeout=3) as response:  # noqa: S310
-                tags = json.loads(response.read())
+            tags = _request_json(f"{self.base_url}/api/tags", timeout=3)
         except Exception:
             return False
         names = {str(m.get("name", "")) for m in tags.get("models", [])}
@@ -127,12 +135,6 @@ class OpenAICompatibleClient:
         self.temperature = temperature
         self.disable_thinking = disable_thinking
 
-    def _get(self, path: str, timeout: int) -> dict[str, Any]:
-        request = urllib.request.Request(f"{self.base_url}{path}")  # noqa: S310 - loopback
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
-            body: dict[str, Any] = json.loads(response.read())
-        return body
-
     def generate(self, system_prompt: str, prompt: str, temperature: float | None = None) -> str:
         payload: dict[str, Any] = {
             "model": self.model,
@@ -147,24 +149,7 @@ class OpenAICompatibleClient:
         if self.disable_thinking:
             payload["chat_template_kwargs"] = {"enable_thinking": False}
 
-        request = urllib.request.Request(  # noqa: S310 - loopback, validat in settings
-            f"{self.base_url}/v1/chat/completions",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        try:
-            with urllib.request.urlopen(  # noqa: S310
-                request, timeout=self.timeout_seconds
-            ) as response:
-                body = json.loads(response.read())
-        except (
-            urllib.error.URLError,
-            http.client.HTTPException,
-            TimeoutError,
-            OSError,
-            json.JSONDecodeError,
-        ) as err:
-            raise OllamaUnavailable(str(err)) from err
+        body = _request_json(f"{self.base_url}/v1/chat/completions", self.timeout_seconds, payload)
 
         try:
             message = body["choices"][0]["message"]
@@ -184,7 +169,7 @@ class OpenAICompatibleClient:
     def available(self) -> bool:
         """Raspunde serverul si cunoaste modelul cerut? Nu arunca niciodata."""
         try:
-            body = self._get("/v1/models", timeout=3)
+            body = _request_json(f"{self.base_url}/v1/models", timeout=3)
         except Exception:
             return False
         names = {str(m.get("id", "")) for m in body.get("data", [])}

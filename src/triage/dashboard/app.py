@@ -19,11 +19,9 @@ from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from triage import db
-from triage.db import STATUSES, Report, quality_stats, session, to_dict
+from triage.db import STATUSES, quality_stats, session, to_dict
 from triage.fetcher import save_raw_eml
 from triage.msg_convert import (
     MsgConversionUnavailable,
@@ -63,10 +61,6 @@ VERDICTS = [v.value for v in Verdict]
 # accepte un fisier care ar tine pagina ocupata degeaba.
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
-
-def _report_by_hash(s: Session, eml_sha256: str) -> Report | None:
-    """Raportul deja existent pentru acest fisier, ca sa putem trimite omul la el."""
-    return s.execute(select(Report).where(Report.eml_sha256 == eml_sha256)).scalar_one_or_none()
 
 STATUS_LABELS = {
     "NEW": "Nou",
@@ -263,9 +257,7 @@ async def upload_reports(request: Request, files: list[UploadFile]) -> HTMLRespo
                 continue
             except Exception:
                 logger.exception("Conversia .msg a esuat: %s", name)
-                results.append(
-                    {"name": name, "error": "Fișierul .msg nu a putut fi convertit."}
-                )
+                results.append({"name": name, "error": "Fișierul .msg nu a putut fi convertit."})
                 continue
             converted_from = name
             name = f"{Path(name).stem}.eml"
@@ -292,7 +284,7 @@ async def upload_reports(request: Request, files: list[UploadFile]) -> HTMLRespo
 
         if report is None:
             with session() as s:
-                existing = _report_by_hash(s, digest)
+                existing = db.get_report_by_hash(s, digest)
                 results.append(
                     {
                         "name": name,

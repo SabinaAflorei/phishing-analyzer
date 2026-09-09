@@ -20,7 +20,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from triage.msg_convert import MsgConversionUnavailable, convert_file
+from triage.msg_convert import MsgConversionUnavailable, msg_bytes_to_eml
 from triage.secure_files import save_secure_file
 
 
@@ -37,7 +37,7 @@ def main() -> int:
 
     for src in args.inputs:
         try:
-            raw = convert_file(src)
+            raw = msg_bytes_to_eml(src.read_bytes())
         except MsgConversionUnavailable as err:
             return int(bool(sys.stderr.write(f"{err}\n"))) or 1
 

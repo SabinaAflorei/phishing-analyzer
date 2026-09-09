@@ -203,6 +203,11 @@ def get_report(s: Session, report_id: int) -> Report | None:
     return s.get(Report, report_id)
 
 
+def get_report_by_hash(s: Session, eml_sha256: str) -> Report | None:
+    """Raportul existent pentru acest fisier, ca sa poti trimite omul la el."""
+    return s.scalars(select(Report).where(Report.eml_sha256 == eml_sha256)).first()
+
+
 def set_status(s: Session, report_id: int, status: str) -> bool:
     if status not in STATUSES:
         raise ValueError(f"Status necunoscut: {status!r}. Permise: {', '.join(STATUSES)}")

@@ -443,7 +443,9 @@ def test_incarcarea_foloseste_modelul_cand_e_disponibil(monkeypatch: pytest.Monk
     """
 
     class ModelFals:
-        def generate(self, system_prompt: str, prompt: str, temperature: float | None = None) -> str:
+        def generate(
+            self, system_prompt: str, prompt: str, temperature: float | None = None
+        ) -> str:
             return "Bună ziua, Ana,\n\nScris de model, nu din șablon.\n\nCu stimă,"
 
         def available(self) -> bool:

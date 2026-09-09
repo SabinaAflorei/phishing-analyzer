@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from triage.domains import is_subdomain_of, public_suffix, registered_domain, split_host
+from triage.domains import is_subdomain_of, registered_domain, split_host
 
 
 def test_split_host() -> None:
@@ -32,10 +32,6 @@ def test_registered_domain(host: str, expected: str) -> None:
 def test_registered_domain_fara_sufix_public() -> None:
     assert registered_domain("192.168.1.1") == ""
     assert registered_domain("localhost") == ""
-
-
-def test_public_suffix_de_risc() -> None:
-    assert public_suffix("factura.zip") == "zip"
 
 
 def test_is_subdomain_of_potriveste_etichete_nu_sufixe_de_text() -> None:

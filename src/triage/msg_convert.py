@@ -80,13 +80,6 @@ def detect_format(raw: bytes) -> str:
     return "unknown"
 
 
-def to_eml(raw: bytes) -> bytes:
-    """Orice format cunoscut -> octeti .eml. Un .eml trece neatins."""
-    if looks_like_msg(raw):
-        return msg_bytes_to_eml(raw)
-    return raw
-
-
 # Headerele wrapper-ului TNEF descriu winmail.dat, nu mesajul pe care il
 # reconstruim. Daca le-am pastra, ar contrazice structura MIME pe care o scriem.
 _DROP_HEADERS = {
@@ -284,8 +277,3 @@ def msg_bytes_to_eml(raw: bytes) -> bytes:
         return bytes(convert(msg).as_bytes())
     finally:
         msg.close()
-
-
-def convert_file(path: Path) -> bytes:
-    """Un .msg de pe disc -> octetii .eml."""
-    return msg_bytes_to_eml(Path(path).read_bytes())

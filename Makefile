@@ -1,4 +1,4 @@
-.PHONY: help venv install setup corpus ingest poll run test lint typecheck ci fmt clean status
+.PHONY: help venv install setup corpus ingest poll run test lint typecheck ci fmt clean
 
 VENV := .venv
 PY   := $(VENV)/bin/python
@@ -39,16 +39,12 @@ run: ## Porneste dashboard-ul pe 127.0.0.1:8000
 test: ## Ruleaza testele (retea blocata by default)
 	$(VENV)/bin/pytest
 
-lint: ## ruff
+lint: ## ruff (aceleasi reguli ca in CI)
 	$(VENV)/bin/ruff check src tests scripts
-	$(VENV)/bin/ruff format --check src tests scripts
 
 fmt: ## formateaza
 	$(VENV)/bin/ruff format src tests scripts
 	$(VENV)/bin/ruff check --fix src tests scripts
-
-status: ## Panou de progres -> build/status.html
-	$(PY) scripts/status.py
 
 typecheck: ## mypy
 	$(VENV)/bin/mypy

@@ -42,11 +42,6 @@ def registered_domain(host: str) -> str:
     return f"{domain}.{suffix}" if domain and suffix else ""
 
 
-def public_suffix(host: str) -> str:
-    """Sufixul public, fara punct: 'foo.co.uk' -> 'co.uk'."""
-    return split_host(host)[2]
-
-
 def is_subdomain_of(host: str, parent: str) -> bool:
     """Potrivire exacta sau subdomeniu propriu-zis.
 

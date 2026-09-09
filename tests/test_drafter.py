@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from triage.drafter import build_draft, sanitize_for_model
+from triage.drafter import generate_draft, sanitize_for_model
 from triage.drafter.prompts import STATIC_TEMPLATES, split_email
 from triage.verdicts import Analysis, Verdict
 
@@ -37,44 +37,44 @@ def test_sanitize_for_model_truncation() -> None:
     assert clean == "Acesta este un text lung"
 
 
-def test_build_draft_needs_review() -> None:
+def test_draft_needs_review() -> None:
     analysis = Analysis(verdict=Verdict.NEEDS_REVIEW, confidence=0.5)
-    assert build_draft(analysis, "Ion Popescu") == ""
+    assert generate_draft(analysis, "Ion Popescu").text == ""
 
 
-def test_build_draft_simulation() -> None:
+def test_draft_simulation() -> None:
     analysis = Analysis(verdict=Verdict.SIMULATION, confidence=1.0)
-    draft = build_draft(analysis, "Maria Ionescu")
+    draft = generate_draft(analysis, "Maria Ionescu").text
     assert "Bună ziua, Maria," in draft
     assert "Cu stimă," in draft
 
 
-def test_build_draft_malicious() -> None:
+def test_draft_malicious() -> None:
     analysis = Analysis(verdict=Verdict.MALICIOUS, confidence=0.9)
-    draft = build_draft(analysis, "Andrei")
+    draft = generate_draft(analysis, "Andrei").text
     assert "Bună ziua, Andrei," in draft
     assert "periculos" in draft
 
 
-def test_build_draft_spam() -> None:
+def test_draft_spam() -> None:
     analysis = Analysis(verdict=Verdict.SPAM, confidence=0.8)
-    draft = build_draft(analysis, "Elena")
+    draft = generate_draft(analysis, "Elena").text
     assert "Bună ziua, Elena," in draft
     assert "publicitate nesolicitată" in draft
     assert "Cu stimă," in draft
 
 
-def test_build_draft_legitimate() -> None:
+def test_draft_legitimate() -> None:
     analysis = Analysis(verdict=Verdict.LEGITIMATE, confidence=0.95)
-    draft = build_draft(analysis, "Popescu, Ion")
+    draft = generate_draft(analysis, "Popescu, Ion").text
     assert "Bună ziua, Ion," in draft
     assert "legitim" in draft
     assert "Cu stimă," in draft
 
 
-def test_build_draft_empty_reporter_name() -> None:
+def test_draft_empty_reporter_name() -> None:
     analysis = Analysis(verdict=Verdict.MALICIOUS, confidence=0.9)
-    draft = build_draft(analysis, "")
+    draft = generate_draft(analysis, "").text
     assert draft.startswith("Bună ziua,\n\n")
 
 

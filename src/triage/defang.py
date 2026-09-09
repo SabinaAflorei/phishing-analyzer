@@ -1,4 +1,12 @@
-"""Defanging. Nimic nu iese din sistem (DB, dashboard, log) in forma clicabila."""
+"""Continut ostil, neutralizat.
+
+Doua jumatati ale aceleiasi treburi: ce IESE din sistem (baza de date,
+dashboard, log) e dezamorsat, iar ce INTRA la model e curatat de text ascuns.
+
+Tiparele de text ascuns stau aici, nu in analizor si in drafter separat: acolo
+erau doua copii care se potriveau pe lucruri usor diferite, deci se putea ajunge
+la "nu am gasit text ascuns" intr-un loc si la o stergere in celalalt.
+"""
 
 from __future__ import annotations
 
@@ -27,39 +35,40 @@ SENSITIVE_PARAMS = {
 
 def strip_url_tokens(url: str) -> str:
     """Înlocuiește valorile parametrilor sensibili din query string cu [STRIPPED]."""
-    if not url:
-        return ""
+    parsed = urlparse(url)
 
-    try:
-        parsed = urlparse(url)
-        # Fara schema si host nu e un URL, e text oarecare. Trecerea lui prin
-        # urlencode il stalcea: un subiect de mail stricat, de forma
-        # "=?utf-8?B?...?=", iesea percent-codat pe ecran.
-        if not parsed.scheme or not parsed.netloc:
-            return url
-        if not parsed.query:
-            return url
+    # Fara schema, host si query nu e un URL cu token-uri, e text oarecare.
+    # Trecerea lui prin urlencode il stalcea: un subiect de mail stricat, de
+    # forma "=?utf-8?B?...?=", iesea percent-codat pe ecran.
+    if not (parsed.scheme and parsed.netloc and parsed.query):
+        return url
 
-        query_params = parse_qsl(parsed.query, keep_blank_values=True)
-        stripped_params = []
+    params = [
+        (key, "[STRIPPED]" if key.lower() in SENSITIVE_PARAMS else val)
+        for key, val in parse_qsl(parsed.query, keep_blank_values=True)
+    ]
+    # safe="[]" ca sa nu fie percent-codate parantezele din [STRIPPED].
+    return urlunparse(parsed._replace(query=urlencode(params, safe="[]/")))
 
-        for key, val in query_params:
-            if key.lower() in SENSITIVE_PARAMS:
-                stripped_params.append((key, "[STRIPPED]"))
-            else:
-                stripped_params.append((key, val))
 
-        # Adaugam safe="[]" pentru a preveni percent-encoding pe paranteze
-        new_query = urlencode(stripped_params, safe="[]/")
-        new_parsed = parsed._replace(query=new_query)
-        return urlunparse(new_parsed)
-    except Exception:
-        return re.sub(
-            r"((?:token|auth|access_token|secret|key|sig)=)[^&]+",
-            r"\1[STRIPPED]",
-            url,
-            flags=re.IGNORECASE,
-        )
+# ---------------------------------------------------------------------------
+# Text ascuns: alb pe alb, 1px, display:none, opacitate zero, off-screen.
+# Sectiunea 4.4 punctul 1 - se curata INAINTE ca textul sa ajunga la model,
+# si se consemneaza ca dovada informativa de catre analizor.
+# ---------------------------------------------------------------------------
+
+HIDDEN_STYLE_RE = re.compile(
+    r"(display\s*:\s*none"
+    r"|visibility\s*:\s*hidden"
+    r"|font-size\s*:\s*0*[01](\.\d+)?\s*(px|pt)"
+    r"|opacity\s*:\s*0(\.0+)?(\s|;|$)"
+    r"|text-indent\s*:\s*-\d{3,}"
+    r"|(^|[;\s])color\s*:\s*(#f{3}|#f{6}|white|rgb\(\s*255\s*,\s*255\s*,\s*255\s*\)))",
+    re.IGNORECASE,
+)
+
+# Invizibile si de control al directiei, inclusiv FEFF, 2060 si 2066-2069.
+INVISIBLE_CHARS_RE = re.compile("[\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]")
 
 
 def defang(value: str) -> str:

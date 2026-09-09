@@ -7,7 +7,7 @@ from typing import Any
 
 from bs4 import BeautifulSoup, Tag
 
-from triage.defang import defang
+from triage.defang import HIDDEN_STYLE_RE, INVISIBLE_CHARS_RE, defang
 from triage.drafter.prompts import STATIC_TEMPLATES, SYSTEM_PROMPTS, split_email
 from triage.verdicts import Analysis, Verdict
 
@@ -30,21 +30,6 @@ GENERIC_TERMS = {
     "system",
     "securitate",
 }
-
-# Text ascuns: alb pe alb, 1px, display:none, opacitate zero, off-screen.
-# Sectiunea 4.4 punctul 1 - se curata INAINTE ca textul sa ajunga la model.
-HIDDEN_STYLE_RE = re.compile(
-    r"(display\s*:\s*none"
-    r"|visibility\s*:\s*hidden"
-    r"|font-size\s*:\s*0*[01](\.\d+)?\s*(px|pt)"
-    r"|opacity\s*:\s*0(\.0+)?(\s|;|$)"
-    r"|text-indent\s*:\s*-\d{3,}"
-    r"|(^|[;\s])color\s*:\s*(#f{3}|#f{6}|white|rgb\(\s*255\s*,\s*255\s*,\s*255\s*\)))",
-    re.IGNORECASE,
-)
-
-# Invizibile si de control al directiei, inclusiv FEFF, 2060 si 2066-2069.
-INVISIBLE_CHARS_RE = re.compile(r"[​-‍‎‏‪-‮﻿⁠⁦-⁩]")
 
 DEFAULT_MAX_INPUT_CHARS = 2000
 
@@ -220,8 +205,3 @@ def _try_llm(
         logger.warning("Output invalid de la model (structura). Se foloseste template-ul static.")
         return ""
     return text
-
-
-def build_draft(analysis: Analysis, reporter_name: str, llm_client: Any = None) -> str:
-    """Doar textul. Pentru apelantii carora nu le pasa de provenienta."""
-    return generate_draft(analysis, reporter_name, llm_client).text

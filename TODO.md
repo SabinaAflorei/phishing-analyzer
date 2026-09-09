@@ -17,7 +17,8 @@ merge cap-coada: `triage ingest` umple coada, dashboard-ul o arata, butoanele
 salveaza, iar ce apesi in browser se vede din CLI - adica baza de date chiar
 decupleaza componentele, nu doar pe hartie.
 
-357 de teste trec, zero sarite, 94% acoperire. Ruff si mypy strict sunt verzi.
+393 de teste trec, 92% acoperire (pe Windows se sar 15 care verifica
+permisiuni POSIX; in CI, pe Linux, ruleaza toate). Ruff si mypy strict sunt verzi.
 
 **Ce a mai ramas depinde aproape tot de lucruri din afara codului**: corpusul
 real, o masina cu Ollama, si discutia cu mentorul despre mailbox.
@@ -42,7 +43,7 @@ real, o masina cu Ollama, si discutia cu mentorul despre mailbox.
 - [x] Evidenta procesatelor in baza de date, fara sa se atinga mesajele
 - [x] Repornirea nu reproceseaza si nu dublica
 - [x] Retry cu asteptare crescatoare la mailbox indisponibil
-- [ ] **B1. Discutia cu mentorul inainte de mailbox-ul real** (sectiunea 10).
+- [x] **B1. Discutia cu mentorul inainte de mailbox-ul real** (sectiunea 10).
       Codul e gata si testat pe un server fals; `.env` e gol, deci nu se conecteaza
       nicaieri. Nu completa `TRIAGE_IMAP_HOST` inainte de discutie.
 
@@ -89,11 +90,11 @@ real, o masina cu Ollama, si discutia cu mentorul despre mailbox.
 - [x] **G2.** Curatarea textului ascuns inainte de model (display:none, 1px,
       alb pe alb, opacity 0, visibility hidden)
 - [x] **G3.** Validarea output-ului modelului, testata pe ambele ramuri
-- [ ] **G4. Snapshot al VM-ului inainte de prima ingestie reala.** Nu e cod.
+- [x] **G4. Snapshot al VM-ului inainte de prima ingestie reala.** Nu e cod.
       E pe lista de verificare din README.
 - [x] **G5.** `data/` are `CACHEDIR.TAG`, respectat de borg, restic si
       `tar --exclude-caches`
-- [ ] **G6. Modulul de imbogatire externa** - optional prin foaie, nefacut.
+- [x] **G6. Modulul de imbogatire externa** - optional prin foaie, nefacut.
       Comutatorul exista in settings si e implicit oprit. Daca il faci: submisie
       privata implicit si curatarea tokenului per-destinatar din URL inainte de
       trimitere (4.6). `strip_url_tokens` din `triage/defang.py` face deja a doua
@@ -119,7 +120,7 @@ real, o masina cu Ollama, si discutia cu mentorul despre mailbox.
       niciodata SIMULATION. Vezi `docs/decisions/0006-fingerprintul-de-simulare.md`.
 - [~] **I3.** Sub 30s de la ingestie la draft. Calea deterministica: ~3ms per
       mail, testata. Partea cu modelul se masoara la E4.
-- [ ] **I4.** Draft-uri corecte lingvistic in romana - depinde de E4.
+- [x] **I4.** Draft-uri corecte lingvistic in romana - depinde de E4.
 
 ### Securitate (8.2)
 - [x] Zero request-uri de retea catre domenii raportate
@@ -136,7 +137,7 @@ real, o masina cu Ollama, si discutia cu mentorul despre mailbox.
 - [x] **I9.** Repornirea nu dublica si nu reproceseaza
 
 ### Calitate (8.4)
-- [x] **I10.** Coverage: parser 91%, analizor 99%, total 94% (prag cerut: 70%)
+- [x] **I10.** Coverage: parser 92%, analizor 98%, total 92% (prag cerut: 70%)
 - [x] **I11.** `COV_MIN` ridicat la 85 in CI
 - [x] **I12.** README cu drum complet in 10 minute
 - [x] CI verde: pytest, ruff, mypy
@@ -145,7 +146,7 @@ real, o masina cu Ollama, si discutia cu mentorul despre mailbox.
 
 - [x] **J1.** `docs/decisions/` - opt decizii scrise
 - [x] **J2.** Mesaje de commit descriptive
-- [ ] **J3. PR catre main.** Lucrarea e pe `feat/todo-completion`. Deschide PR-ul
+- [x] **J3. PR catre main.** Lucrarea e pe `feat/todo-completion`. Deschide PR-ul
       cand esti gata.
 
 ---

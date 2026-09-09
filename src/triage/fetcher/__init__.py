@@ -7,7 +7,7 @@ import imaplib
 import logging
 import os
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -150,11 +150,3 @@ def _extract_rfc822(payload: list[Any]) -> bytes:
         if isinstance(item, tuple) and len(item) >= 2 and isinstance(item[1], bytes):
             return item[1]
     return b""
-
-
-def poll_interval_sleeper(interval_seconds: int) -> Iterator[None]:
-    """Un tick la fiecare `interval_seconds`. Primul e imediat."""
-    yield None
-    while True:
-        time.sleep(interval_seconds)
-        yield None
