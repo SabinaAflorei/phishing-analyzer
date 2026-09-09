@@ -7,7 +7,9 @@ infrastructura atacatorului, nu trimite mail și nu scoate date în afară.
 Un coleg raportează un mesaj suspect. Sistemul îl parsează, îi dă un verdict
 determinist cu dovezi, scrie o ciornă de răspuns în română, și îl pune într-o
 coadă pe care un analist o rezolvă din browser. **Verdictul nu îl dă modelul.**
-Modelul doar îmbracă în text dovezile pe care analizorul le-a găsit deja.
+Modelul doar îmbracă în text dovezile pe care analizorul le-a găsit deja —
+și dacă modelul e picat, sistemul funcționează exact la fel, doar cu un
+răspuns mai scurt.
 
 ---
 
@@ -59,6 +61,15 @@ Dacă îl lași necompletat sistemul pornește oricum, cade pe varianta `.exampl
 și scrie un avertisment în log — ca să nu descoperi peste două săptămâni că
 jumătate din reguli mergeau pe date de exemplu.
 
+> **Din experiență**: fiind exclus din git, acest fișier nu are plasă de
+> siguranță. O suprascriere din greșeală (de exemplu peste un config de test
+> temporar) nu se recuperează cu `git checkout`, pentru că git nu l-a văzut
+> niciodată. Înainte de orice experiment care atinge acest fișier —
+> generare de date demo, testare cu alt set de domenii, orice —
+> `cp config/company_domains.yaml config/company_domains.yaml.backup` întâi,
+> ștergi backup-ul după. Un obicei de 5 secunde care evită o oră de
+> reconstruit domenii din memorie.
+
 ### Corpusul de test
 
 `make corpus` generează 12 cazuri **sintetice**, cu date inventate. Sunt acolo
@@ -67,6 +78,11 @@ ca sistemul să aibă pe ce rula pe orice mașină.
 Dacă ai corpusul real, copiază-l în `corpus/eml/` (fișierele au aceleași nume),
 rulează `./scripts/fix_perms.sh` și sari peste `make corpus`. Diferența contează
 — vezi `docs/decisions/0008-corpus-sintetic.md`.
+
+Separat, `corpus/demo/` conține alte câteva mailuri complet fictive — folosite
+special pentru capturile din secțiunea „Interfața” de mai jos, ca să poți arăta
+cuiva cum arată sistemul fără să expui vreodată o raportare reală, chiar și
+neintenționat printr-un screenshot.
 
 ### Ollama, dacă îl vrei
 
@@ -83,12 +99,64 @@ diacriticele, lungimea și constrângerile per categorie. Modelul ales se pune �
 `config/settings.yaml`, la `llm.model`. Ca să oprești complet LLM-ul:
 `llm.enabled: false`.
 
+**Notă de latență**: pe CPU, fără GPU, generarea unei ciorne poate dura
+30-90 de secunde — testat direct, nu teoretic. Nu e un bug, e limita
+hardware-ului. Dacă timeout-ul din `settings.yaml` e prea strâns, ciorne
+valide pică pe fallback fals-negativ; `llm.timeout_seconds: 90` e valoarea
+sigură găsită prin măsurare, nu cea implicită de manual.
+
 ### Mailbox real (IMAP)
 
 **Nu înainte de discuția cu mentorul** (secțiunea 10). Când e cazul, completezi
 credențialele în `.env`, pui `source: imap` în `config/settings.yaml`, și
 pornești `make poll`. Conexiunea e read-only: nu șterge, nu mută și nu marchează
 nimic.
+
+---
+
+## Interfața
+
+### Coada de lucru
+![Coada de lucru](docs/screenshots/queue.png)
+
+Fiecare raportare apare cu verdictul, scorul de încredere afișat ca bară
+colorată (roșu sub 60%, portocaliu 60-85%, verde peste), și statusul curent.
+Un marker discret arată rândurile pe care un analist le-a corectat sau
+escaladat manual, ca să nu se confunde cu verdictul automat.
+
+Filtrele pe verdict și status sunt client-side — clic pe un chip, fără
+request nou către server, util când coada are zeci de rapoarte și vrei doar
+`MALICIOUS` + `NEW`.
+
+### Detaliu raport
+
+Verdict legitim — o singură dovadă pozitivă, ciornă care confirmă și încurajează raportarea:
+
+![Detaliu raport legitim](docs/screenshots/detail-legitimate.png)
+
+Verdict periculos — cinci dovezi coroborate, colorate pe severitate (roșu = CRITICAL, portocaliu = MEDIUM, verde = LOW):
+
+![Detaliu raport periculos](docs/screenshots/detail-malicious.png)
+
+Dovezile care au dus la verdict sunt colorate pe severitate — nu toate
+dovezile cântăresc la fel, și un analist trebuie să vadă instant care
+contează. Headerele email-ului sunt dezamorsate, corpul e text curat
+(niciodată HTML randat), iar ciorna de răspuns e editabilă direct aici,
+cu copiere într-un clic, înainte de trimitere manuală.
+
+### Statistici
+![Statistici](docs/screenshots/stats.png)
+
+Distribuția verdictelor și rata de acceptare a ciornelor — dacă analiștii
+trimit majoritatea ciornelor neschimbate, drafter-ul își face treaba bine;
+dacă rescriu fiecare ciornă, aici se vede exact unde.
+
+**Temă întunecată** disponibilă din butonul din header, salvată local între
+sesiuni. Nu e doar cosmetică — un analist care triază rapoarte ore în șir
+beneficiază de mai puțină oboseală vizuală decât un fundal alb permanent.
+
+*Capturile de mai sus folosesc exclusiv `corpus/demo/` (vezi mai sus) —
+nicio dată reală de companie sau raportare reală nu apare în aceste imagini.*
 
 ---
 
@@ -130,11 +198,10 @@ unde are sens, și `-v` pentru log detaliat.
 Patru componente independente care comunică printr-o bază de date SQLite.
 Niciuna nu o cheamă direct pe următoarea.
 
-```
-IMAP / corpus  ->  fetcher  ->  parser  ->  analizor  ->  drafter  ->  SQLite
-                                                                        |
-                                                          dashboard  <--+
-```
+IMAP / corpus -> fetcher -> parser -> analizor -> drafter -> SQLite
+|
+dashboard <--+
+
 
 De aici vin trei proprietăți pe care se sprijină tot restul:
 
@@ -226,22 +293,51 @@ de dovezi obligatorii, fără conținut sensibil.
 
 ## Modelul ales
 
-**Încă nemăsurat pe această mașină** — Ollama nu e instalat aici, deci
-`scripts/eval_model.py` nu a putut rula pe niciun model. `llama3.1:8b` din
-`settings.example.yaml` este un punct de pornire moștenit, **nu o decizie**.
+**qwen2.5:7b-instruct**, ales în urma unei evaluări comparative cu
+`llama3.1:8b` — motivul complet, cu cifre, e în
+[`docs/decisions/0004-modelul-pentru-drafter.md`](docs/decisions/0004-modelul-pentru-drafter.md).
 
-Ce trebuie făcut, pe VM-ul cu Ollama:
+Pe scurt: `qwen2.5:7b-instruct` nu a dezvăluit niciodată natura de
+simulare pe categoria `SIMULATION` (criteriul de siguranță cel mai
+important), deși ambele modele aveau eșecuri pe alte constrângeri de
+formă. Latența (30-90s pe CPU, fără GPU) rămâne peste bugetul țintă de
+30s din criteriul de acceptanță — vezi decizia pentru detalii.
+
+Pentru a re-evalua pe alt hardware sau alt model:
 
 ```bash
-python3 scripts/eval_model.py --baseline    # reperul: șabloanele scrise de om
-python3 scripts/eval_model.py --models qwen2.5:7b-instruct,llama3.1:8b,mistral-nemo:12b \
-        --runs 5 --out build/eval.md
+python3 scripts/eval_model.py --baseline
+python3 scripts/eval_model.py --models qwen2.5:7b-instruct,llama3.1:8b --runs 5 --out build/eval.md
 ```
 
-Apoi completează aici tabelul din `build/eval.md` și scrie în
-`docs/decisions/0004-modelul-pentru-drafter.md` de ce ai ales ce ai ales.
-Criteriul de oprire e în script: peste 30s la cald înseamnă că modelul nu
-încape în bugetul din 8.1.
+## Probleme întâlnite frecvent
+
+O listă scurtă de simptome pe care le-am văzut concret în timpul dezvoltării,
+ca să nu mai piardă nimeni timp reinventând diagnosticul.
+
+**`ImportError: cannot import name '...' from partially initialized module`**
+la pornirea dashboard-ului sau la orice import din `triage.settings` —
+import circular. `triage/settings.py` și `triage/drafter` se importă reciproc
+dacă clientul Ollama e importat la nivel de modul în settings. Fix: import-ul
+respectiv stă sub `if TYPE_CHECKING:`, cu importul real local, în interiorul
+funcției care chiar are nevoie de el la runtime.
+
+**`yaml.scanner.ScannerError` la pornirea testelor, doar în CI, niciodată local**
+— aproape sigur config-ul `.example.yaml` are o eroare de sintaxă pe care
+n-o vezi niciodată local, pentru că mereu ai fișierul real (exclus din git)
+și fallback-ul pe `.example` nu se declanșează la tine. Testează local
+simulând absența fișierului real (`mv` temporar) înainte să presupui că
+CI-ul e stricat.
+
+**Teste care depind de `corpus/eml/` pică cu `IndexError`/`AssertionError`
+în loc să se sară** — lipsește marker-ul de skip pe acel test specific.
+Verifică dacă fișierul de test importă corect markerul comun de
+„sari dacă lipsește corpusul” (definit o singură dată, nu duplicat).
+
+**Text invizibil în tema întunecată** — aproape sigur un `style="color: #hex"`
+inline, hardcodat direct în HTML, care ignoră variabilele CSS de temă.
+Regula de bază pentru orice interfață nouă: nicio culoare hardcodată inline
+în șabloane, totul prin variabile CSS din `app.css`.
 
 ---
 
@@ -252,6 +348,12 @@ make ci          # ruff + mypy + pytest, tot ce trebuie verde înainte de PR
 make test        # doar testele
 make status      # panou de progres -> build/status.html
 ```
+
+Branch per funcționalitate, PR către `main`, review înainte de merge — nu
+direct pe `main`. Mesajele de commit descriu **ce** s-a schimbat și **de ce**,
+nu doar „fix” sau „update” — peste o lună, `git log` e primul loc unde cauți
+când ceva s-a stricat, și trebuie să te ajute, nu doar să confirme că ceva
+s-a întâmplat.
 
 Deciziile de arhitectură sunt în `docs/decisions/`. Fiecare spune ce s-a decis,
 de ce, și ce s-a dat la schimb.
