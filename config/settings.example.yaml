@@ -8,11 +8,37 @@ paths:
 
 llm:
   enabled: true
+
+  # Ce API vorbeste serverul local, nu ce model ruleaza:
+  #   ollama -> POST /api/generate        (Ollama, implicit pe 11434)
+  #   openai -> POST /v1/chat/completions (llama.cpp `llama serve` pe 8080,
+  #                                        vLLM, LM Studio)
+  # Ambele raman validate ca loopback la pornire (sectiunea 4.1).
+  api: ollama
   base_url: http://127.0.0.1:11434
   model: llama3.1:8b     # punct de pornire, NU o decizie - vezi README
+
+  # Modelele care "gandesc" (Qwen3, DeepSeek-R1) consuma tot bugetul de token-uri
+  # pe rationament si intorc text gol, deci ciorna ar cadea mereu pe template.
+  disable_thinking: true
+
   temperature: 0.2
   max_input_chars: 2000   # trunchiere agresiva inainte de model
   timeout_seconds: 30
+
+# Varianta masurata pe corpusul real, pe CPU fara GPU dedicat (vezi commit E4):
+#
+#   api: openai
+#   base_url: http://127.0.0.1:8080
+#   model: gemma-4-26b-a4b
+#
+#   llama serve -hf unsloth/gemma-4-26B-A4B-it-qat-GGUF:Q4_K_XL \
+#       --host 127.0.0.1 --port 8080 --offline --alias gemma-4-26b-a4b \
+#       -c 8192 -np 1 -t 12 --cache-reuse 256
+#
+# Un model DENS de 9B da 4 tok/s pe acelasi CPU si nu incape in bugetul de 30s;
+# cel MoE are 26B totali dar ~4B activi, deci ajunge la 7.4 tok/s. `-np 1` plus
+# `--cache-reuse` fac system prompt-ul sa fie recitit din cache intre ciorne.
 
 enrichment:
   enabled: false          # offline-first: implicit oprit
