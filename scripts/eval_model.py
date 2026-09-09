@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluare a unui model Ollama pe sarcina reala a drafter-ului.
+"""Evaluare a unui model local pe sarcina reala a drafter-ului.
 
 Nu "pare bine sau nu": ruleaza aceleasi cazuri de N ori si verifica automat tot
 ce se poate verifica (structura de email, diacritice, lungime, constrangeri de
@@ -9,29 +9,32 @@ System prompt-urile si template-urile vin din src/triage/drafter/prompts.py -
 acelasi fisier pe care il foloseste drafter-ul in productie. Ce calibrezi aici
 ajunge direct in sistem.
 
+NU cere Ollama. Foloseste ACELEASI clientii ca productia (`triage.llm`), deci
+merge la fel pe `llama-server` (llama.cpp), vLLM sau LM Studio - orice server cu
+API OpenAI. Fara argumente ia runtime-ul, adresa si modelul din
+`config/settings.yaml`, adica exact ce va folosi sistemul.
+
 Utilizare:
-    python3 scripts/eval_model.py
+    python3 scripts/eval_model.py                     # ce scrie in settings.yaml
     python3 scripts/eval_model.py --runs 5
     python3 scripts/eval_model.py --models qwen2.5:7b-instruct,llama3.1:8b
+    python3 scripts/eval_model.py --api openai --base-url http://127.0.0.1:8080
     python3 scripts/eval_model.py --out build/eval-llama3.1-8b.md
     python3 scripts/eval_model.py --baseline          # evalueaza template-urile statice
     EVAL_DEBUG=1 python3 scripts/eval_model.py --runs 1
 
-Doar stdlib. Vorbeste exclusiv cu 127.0.0.1:11434.
+Doar stdlib, si doar loopback: `base_url` trece prin acelasi validator ca in
+productie, deci un server extern e respins inainte sa plece vreun octet.
 """
 
 from __future__ import annotations
 
 import argparse
-import http.client
-import json
 import os
 import re
 import statistics
 import sys
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,8 +45,9 @@ from triage.drafter.prompts import (
     SYSTEM_PROMPTS,
     split_email,
 )
+from triage.llm import LLMClient, OllamaUnavailable, build_llm_client
+from triage.settings import LLMSettings, get_settings
 
-OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 DEBUG = bool(os.getenv("EVAL_DEBUG"))
 
 
@@ -259,39 +263,37 @@ class Result:
         return [k for k, v in self.checks.items() if not v]
 
 
-class OllamaError(RuntimeError):
-    pass
+def build_client(model: str, args: argparse.Namespace) -> LLMClient:
+    """Clientul de PRODUCTIE, nu unul scris pentru evaluare.
 
-
-def generate(model: str, case: Case, temperature: float, timeout: int) -> Result:
-    payload = json.dumps(
-        {
-            "model": model,
-            "system": SYSTEM_PROMPTS[case.category],
-            "prompt": case.user_prompt(),
-            "stream": False,
-            "keep_alive": "10m",
-            "options": {"temperature": temperature, "num_predict": 220},
-        }
-    ).encode()
-
-    req = urllib.request.Request(  # noqa: S310 - loopback, fara schema externa
-        OLLAMA_URL, data=payload, headers={"Content-Type": "application/json"}
+    Daca masuram cu alt cod decat cel care ruleaza pe bune, masuram altceva:
+    alt timeout, alt num_predict, alt tratament al modelelor care "gandesc".
+    `LLMSettings` valideaza si aici ca adresa e pe loopback.
+    """
+    settings = LLMSettings(
+        enabled=True,
+        api=args.api,
+        base_url=args.base_url,
+        model=model,
+        temperature=args.temperature,
+        timeout_seconds=args.timeout,
     )
+    client = build_llm_client(settings)
+    assert client is not None  # enabled=True, deci nu poate fi None
+    return client
+
+
+def generate(client: LLMClient, case: Case, temperature: float) -> Result:
     start = time.perf_counter()
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
-            body = json.loads(resp.read())
-    except (urllib.error.URLError, http.client.HTTPException, TimeoutError, OSError) as e:
-        raise OllamaError(str(e)) from e
+    text = client.generate(
+        system_prompt=SYSTEM_PROMPTS[case.category],
+        prompt=case.user_prompt(),
+        temperature=temperature,
+    )
     elapsed = time.perf_counter() - start
 
-    text = body.get("response", "").strip()
     if DEBUG:
-        print(
-            f"    [debug] done_reason={body.get('done_reason')} "
-            f"eval_count={body.get('eval_count')} raw={text[:160]!r}"
-        )
+        print(f"    [debug] {elapsed:.1f}s raw={text[:160]!r}")
     return Result(text=text, seconds=elapsed, checks=check(case, text))
 
 
@@ -314,8 +316,14 @@ def baseline() -> None:
 
 
 def main() -> int:
+    # Implicit: exact ce e configurat pentru productie. Nu vrei sa alegi un model
+    # dupa o masuratoare facuta pe alt runtime decat cel care va rula.
+    cfg = get_settings().llm
+
     ap = argparse.ArgumentParser()
-    ap.add_argument("--models", default="qwen2.5:7b-instruct")
+    ap.add_argument("--models", default=cfg.model, help=f"implicit: {cfg.model}")
+    ap.add_argument("--api", choices=["ollama", "openai"], default=cfg.api)
+    ap.add_argument("--base-url", default=cfg.base_url, help=f"implicit: {cfg.base_url}")
     ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--temperature", type=float, default=0.2)
     ap.add_argument("--timeout", type=int, default=180)
@@ -328,6 +336,7 @@ def main() -> int:
         return 0
 
     models = [m.strip() for m in args.models.split(",") if m.strip()]
+    print(f"Server: {args.base_url} (API {args.api})")
     report: list[str] = [
         "# Evaluare modele - drafter RO\n\n",
         f"Rulari per caz: {args.runs} | temperatura: {args.temperature}\n",
@@ -337,6 +346,13 @@ def main() -> int:
     for model in models:
         print(f"\n{'=' * 70}\nMODEL: {model}\n{'=' * 70}")
         report.append(f"\n## {model}\n")
+        client = build_client(model, args)
+        # O proba inainte, ca sa nu astepti patru timeout-uri ca sa afli ca serverul
+        # nu ruleaza sau ca modelul se numeste altfel decat crezi.
+        if not client.available():
+            print(f"  {args.base_url} nu raspunde sau nu serveste modelul {model}.")
+            print("  Porneste serverul, sau verifica numele exact al modelului.")
+            return 1
         results: list[Result] = []
         per_case: dict[str, list[Result]] = {}
 
@@ -346,10 +362,9 @@ def main() -> int:
             per_case[case.category] = []
             for i in range(args.runs):
                 try:
-                    r = generate(model, case, args.temperature, args.timeout)
-                except OllamaError as e:
-                    print(f"  EROARE Ollama: {e}")
-                    print("  Verifica: systemctl is-active ollama; free -h (OOM?)")
+                    r = generate(client, case, args.temperature)
+                except OllamaUnavailable as e:
+                    print(f"  EROARE de la serverul de model: {e}")
                     return 1
                 results.append(r)
                 per_case[case.category].append(r)
