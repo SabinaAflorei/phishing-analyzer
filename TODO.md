@@ -17,7 +17,7 @@ merge cap-coada: `triage ingest` umple coada, dashboard-ul o arata, butoanele
 salveaza, iar ce apesi in browser se vede din CLI - adica baza de date chiar
 decupleaza componentele, nu doar pe hartie.
 
-393 de teste trec, 92% acoperire (pe Windows se sar 15 care verifica
+412 de teste trec, 92% acoperire (pe Windows se sar 15 care verifica
 permisiuni POSIX; in CI, pe Linux, ruleaza toate). Ruff si mypy strict sunt verzi.
 
 **Ce a mai ramas depinde aproape tot de lucruri din afara codului**: corpusul
@@ -71,10 +71,18 @@ real, o masina cu Ollama, si discutia cu mentorul despre mailbox.
 - [x] **E1.** Ollama conectat (`triage/llm.py`). Clientul se paseaza din pipeline.
 - [x] **E2.** Timeout pe apel, din `llm.timeout_seconds`
 - [x] **E3.** Trunchiere la `llm.max_input_chars`, valoarea din config
-- [ ] **E4. Ruleaza `scripts/eval_model.py` si alege modelul.** Nefacut: Ollama
-      nu e instalat pe masina pe care s-a lucrat. `llama3.1:8b` ramane o valoare
-      mostenita, nu o decizie. Vezi `docs/decisions/0004-modelul-pentru-drafter.md`
-      pentru comanda exacta si criteriul de oprire.
+- [~] **E4. Ruleaza `scripts/eval_model.py` si alege modelul.** Masuratoarea nu
+      s-a facut inca, dar **nu mai depinde de Ollama**: scriptul foloseste acum
+      aceiasi clienti ca productia, deci merge pe `llama-server`, vLLM sau
+      LM Studio, si isi ia implicit runtime-ul, adresa si modelul din
+      `config/settings.yaml`. Fara argumente:
+
+          python3 scripts/eval_model.py --baseline
+          python3 scripts/eval_model.py --runs 5 --out build/eval.md
+
+      Daca serverul nu raspunde, o spune din prima in loc sa astepte timeout-uri.
+      Ramas de facut: porneste serverul, ruleaza, si scrie decizia in
+      `docs/decisions/0004-modelul-pentru-drafter.md`.
 - [x] **E5.** Test de fallback cu Ollama picat
 
 ## F. Dashboard (sectiunea 6.5)
@@ -82,7 +90,10 @@ real, o masina cu Ollama, si discutia cu mentorul despre mailbox.
 - [x] **F1.** "Marcheaza trimis" si "Escaleaza" salveaza. O actiune necunoscuta
       spune ca nu s-a schimbat nimic, in loc sa minta cu "succes".
 - [x] **F2.** Statusul si corectiile persista; filtrele pe status si verdict merg
-- [x] **F3.** Distributia de verdicte si matricea de corectii
+- [x] **F3.** Distributia de verdicte si matricea de corectii. Aceleasi metrici
+      se scot si din linia de comanda, cu `triage stats` / `triage stats --json`:
+      matricea (verdict automat -> verdict corectat) e semnalul dupa care se
+      calibreaza `SIGNAL_WEIGHT`, si pana acum se vedea doar din browser.
 
 ## G. Securitate (sectiunea 4)
 
@@ -154,7 +165,8 @@ real, o masina cu Ollama, si discutia cu mentorul despre mailbox.
 ## Ce as face in continuare
 
 1. **E4** - cea mai mare bucata ramasa, si singura care blocheaza doua criterii
-   (I3 si I4). Are nevoie de o masina cu Ollama, nimic altceva.
+   (I3 si I4). Are nevoie doar de un server local de model pornit: Ollama,
+   `llama-server`, vLLM sau LM Studio, oricare.
 2. **H1** - adu corpusul real si rerulează. Aici se afla daca parserul chiar
    descurca ce ies clientii de mail din realitate.
 3. **B1** - discutia cu mentorul, apoi completeaza `.env`.

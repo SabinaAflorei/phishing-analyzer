@@ -32,7 +32,7 @@ cu verdicte. Oprești serverul cu `Ctrl+C`.
 Dacă vrei să verifici că totul e în regulă înainte:
 
 ```bash
-make test       # 393 de teste, rețeaua blocată
+make test       # 412 de teste, rețeaua blocată
 ```
 
 ### Ce face `make setup`
@@ -78,6 +78,10 @@ ollama pull qwen2.5:7b-instruct
 python3 scripts/eval_model.py --models qwen2.5:7b-instruct,llama3.1:8b --runs 3
 ```
 
+Nu e obligatoriu să fie Ollama: pune `llm.api: openai` în `config/settings.yaml`
+și orice server local cu API OpenAI (`llama-server`, vLLM, LM Studio) merge la
+fel, atât în producție cât și la evaluare.
+
 Scriptul rulează aceleași cazuri de N ori și verifică automat structura,
 diacriticele, lungimea și constrângerile per categorie. Modelul ales se pune în
 `config/settings.yaml`, la `llm.model`. Ca să oprești complet LLM-ul:
@@ -107,7 +111,14 @@ Din `make`:
 | `make ci` | ruff + mypy + teste — tot ce trebuie verde înainte de PR |
 | `make clean` | șterge cache-urile și `build/` |
 
-Direct din CLI (după `make setup`, binarul e în `.venv/bin/triage`):
+Pe Windows, `make` funcționează din **Git Bash** sau WSL, nu din `cmd.exe`:
+Makefile-ul alege singur `.venv/Scripts` în loc de `.venv/bin`, dar restul
+comenzilor (`test`, `cp`, `find`, `rm`) sunt POSIX. Fără `make`, toate țintele
+au un echivalent direct: `.venv\Scripts\pytest`, `.venv\Scripts\ruff check src tests
+scripts`, `.venv\Scripts\mypy`.
+
+Direct din CLI (după `make setup`, binarul e în `.venv/bin/triage`, respectiv
+`.venv\Scripts\triage` pe Windows):
 
 ```bash
 triage ingest                 # un ciclu de ingestie
@@ -115,12 +126,29 @@ triage poll --interval 300    # ingestie la interval
 triage list --status NEW      # ce e în coadă
 triage list --verdict SPAM    # filtrat pe verdict
 triage show 3                 # un raport, cu dovezi și ciornă
-triage check mail.eml         # analizează un .eml fără să îl salveze nicăieri
+triage show 3 --draft         # doar ciorna: `triage show 3 --draft | xclip`
+triage stats                  # metricile de calitate din 8.4
+triage check mail.eml         # analizează un mesaj fără să îl salveze nicăieri
+triage check mail.msg         # și .msg: se convertește pe loc, nu îl pregăti tu
 triage check mail.eml --json  # același lucru, pentru scripting
 ```
 
-`check` e singura comandă care nu atinge baza de date. Toate acceptă `--json`
-unde are sens, și `-v` pentru log detaliat.
+`check` e singura comandă care nu atinge baza de date, și acceptă orice îi dai:
+un mesaj malformat se analizează, nu se respinge (criteriul 8.3). Toate acceptă
+`--json` unde are sens, și `-v` pentru log detaliat.
+
+### Unde se uită la calitate
+
+`triage stats` scoate din baza de date exact ce arată și pagina de statistici:
+rata de acceptare a ciornelor, distribuția verdictelor și **matricea de
+corecții** — care verdict automat e cel mai des schimbat de analist, și în ce.
+Aceea e informația după care se calibrează ponderile din `SIGNAL_WEIGHT`; până
+acum se putea vedea doar din browser.
+
+```bash
+triage stats           # tabel citibil
+triage stats --json    # pentru un raport sau un grafic
+```
 
 ---
 
