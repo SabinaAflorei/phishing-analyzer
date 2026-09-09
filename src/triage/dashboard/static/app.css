@@ -796,9 +796,6 @@ code, .mono {
 .drop-result__meta dt { color: var(--text-3); font-size: var(--fs-sm); }
 .drop-result__meta dd { margin: 0; font-size: var(--fs-sm); word-break: break-word; }
 
-.drop-result__evidence { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s2); }
-.drop-result__evidence li { font-size: var(--fs-sm); display: flex; gap: var(--s2); align-items: baseline; flex-wrap: wrap; }
-.drop-result__evidence code { font-family: var(--mono); font-size: var(--fs-xs); }
 
 @media (max-width: 34rem) {
   .drop-result__meta > div { grid-template-columns: 1fr; gap: 0; }

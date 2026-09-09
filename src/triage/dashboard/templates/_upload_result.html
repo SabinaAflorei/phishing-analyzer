@@ -43,13 +43,21 @@
     <div><dt>Scor</dt><dd>{{ "%.2f"|format(item.report.score) }}</dd></div>
   </dl>
 
+  {#
+    Aceeasi structura ca lista de dovezi din pagina de detaliu, ca sa arate la fel
+    in ambele locuri. `.sev` e un BULINE de 8px, nu o eticheta cu text: pune text
+    in el si textul iese din patrat peste descriere. Severitatea se scrie in linia
+    de cod, langa codul dovezii.
+  #}
   {% if item.report.evidence %}
-  <ul class="drop-result__evidence">
+  <ul class="evidence">
     {% for ev in item.report.evidence %}
     <li>
-      <code>{{ ev.code }}</code>
-      <span class="sev sev--{{ ev.severity }}">{{ ev.severity }}</span>
-      {{ ev.description }}
+      <span class="sev sev--{{ ev.severity }}" title="Severitate: {{ ev.severity }}"></span>
+      <div>
+        <span class="evidence__code">{{ ev.code }} · {{ ev.severity }}</span>
+        {{ ev.description }}
+      </div>
     </li>
     {% endfor %}
   </ul>
