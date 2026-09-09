@@ -15,7 +15,12 @@ from typing import Any
 
 import pytest
 
-from triage.llm import OllamaClient, OllamaUnavailable, build_llm_client
+from triage.llm import (
+    OllamaClient,
+    OllamaUnavailable,
+    OpenAICompatibleClient,
+    build_llm_client,
+)
 from triage.settings import LLMSettings
 
 
@@ -179,3 +184,115 @@ def test_clientul_respecta_base_url_ul_din_config(monkeypatch: pytest.MonkeyPatc
     assert client is not None
     client.generate(system_prompt="s", prompt="p")
     assert calls[0]["url"].startswith("http://localhost:9999/")
+
+
+# ---------------------------------------------------------------------------
+# Clientul OpenAI-compatibil (llama.cpp `llama serve`, vLLM, LM Studio)
+# ---------------------------------------------------------------------------
+
+
+def _chat_ok(content: str = "Bună ziua, Ion,\n\nCorp.\n\nCu stimă,") -> Any:
+    payload = {"choices": [{"message": {"role": "assistant", "content": content}}]}
+    return lambda: FakeResponse(json.dumps(payload).encode())
+
+
+def test_openai_client_trimite_mesajele_si_intoarce_textul(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _patch_urlopen(monkeypatch, _chat_ok())
+    client = OpenAICompatibleClient(
+        base_url="http://127.0.0.1:8080", model="gemma", timeout_seconds=12
+    )
+
+    text = client.generate(system_prompt="sistem", prompt="utilizator")
+
+    assert text.startswith("Bună ziua, Ion,")
+    assert calls[0]["url"] == "http://127.0.0.1:8080/v1/chat/completions"
+    assert calls[0]["timeout"] == 12
+    body = calls[0]["body"]
+    assert body["model"] == "gemma"
+    assert body["messages"] == [
+        {"role": "system", "content": "sistem"},
+        {"role": "user", "content": "utilizator"},
+    ]
+
+
+def test_openai_client_opreste_rationamentul_implicit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Modelele care 'gandesc' consuma tot bugetul si intorc content gol."""
+    calls = _patch_urlopen(monkeypatch, _chat_ok())
+    OpenAICompatibleClient(model="qwen").generate(system_prompt="s", prompt="u")
+
+    assert calls[0]["body"]["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def test_openai_client_fara_steag_cand_e_dezactivat(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _patch_urlopen(monkeypatch, _chat_ok())
+    OpenAICompatibleClient(model="m", disable_thinking=False).generate(
+        system_prompt="s", prompt="u"
+    )
+
+    assert "chat_template_kwargs" not in calls[0]["body"]
+
+
+def test_openai_client_raspuns_doar_cu_rationament_e_eroare(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fara asta, drafter-ul primea '' si cadea tacut pe template."""
+    payload = {"choices": [{"message": {"content": "", "reasoning_content": "gandesc..."}}]}
+    _patch_urlopen(monkeypatch, lambda: FakeResponse(json.dumps(payload).encode()))
+
+    with pytest.raises(OllamaUnavailable, match="rationament"):
+        OpenAICompatibleClient(model="m").generate(system_prompt="s", prompt="u")
+
+
+def test_openai_client_raspuns_fara_choices(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_urlopen(monkeypatch, lambda: FakeResponse(json.dumps({"error": "x"}).encode()))
+
+    with pytest.raises(OllamaUnavailable):
+        OpenAICompatibleClient(model="m").generate(system_prompt="s", prompt="u")
+
+
+def test_openai_client_erorile_de_retea_devin_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def boom(request: Any, timeout: float | None = None) -> Any:
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr("triage.llm.urllib.request.urlopen", boom)
+
+    with pytest.raises(OllamaUnavailable):
+        OpenAICompatibleClient(model="m").generate(system_prompt="s", prompt="u")
+
+
+def test_openai_available_verifica_modelul(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = {"data": [{"id": "gemma-4-26b-a4b"}]}
+    _patch_urlopen(monkeypatch, lambda: FakeResponse(json.dumps(payload).encode()))
+
+    assert OpenAICompatibleClient(model="gemma-4-26b-a4b").available() is True
+    assert OpenAICompatibleClient(model="altceva").available() is False
+
+
+def test_openai_available_nu_arunca_niciodata(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(request: Any, timeout: float | None = None) -> Any:
+        raise OSError("picat")
+
+    monkeypatch.setattr("triage.llm.urllib.request.urlopen", boom)
+
+    assert OpenAICompatibleClient(model="m").available() is False
+
+
+def test_build_llm_client_alege_dupa_api() -> None:
+    """Comutatorul din config decide runtime-ul, nu o variabila de mediu ascunsa."""
+    ollama = build_llm_client(LLMSettings(api="ollama"))
+    openai = build_llm_client(
+        LLMSettings(api="openai", base_url="http://127.0.0.1:8080", model="gemma")
+    )
+
+    assert isinstance(ollama, OllamaClient)
+    assert isinstance(openai, OpenAICompatibleClient)
+
+
+def test_base_url_extern_e_respins_si_pentru_openai() -> None:
+    """Sectiunea 4.1 nu se schimba cu runtime-ul."""
+    with pytest.raises(ValueError, match="loopback"):
+        LLMSettings(api="openai", base_url="http://api.openai.com")

@@ -35,11 +35,25 @@ class PathSettings(BaseModel):
 
 class LLMSettings(BaseModel):
     enabled: bool = True
+
+    # Ce API vorbeste serverul local, nu ce model ruleaza:
+    #   "ollama" -> POST /api/generate      (Ollama, portul 11434)
+    #   "openai" -> POST /v1/chat/completions (llama.cpp `llama serve`, vLLM,
+    #               LM Studio - portul 8080 la llama.cpp)
+    # Amandoua raman strict pe loopback. Foaia de task cere un model local, nu
+    # un anume runtime; llama.cpp ruleaza aceleasi GGUF-uri fara Ollama instalat.
+    api: Literal["ollama", "openai"] = "ollama"
+
     base_url: str = "http://127.0.0.1:11434"
     model: str = "llama3.1:8b"
     temperature: float = 0.2
     max_input_chars: int = 2000
     timeout_seconds: int = 30
+
+    # Modelele care "gandesc" (Qwen3, DeepSeek-R1) consuma tot bugetul de token-uri
+    # pe rationament si intorc `content` gol - draft-ul ar cadea mereu pe template.
+    # Steagul se trimite serverului ca `chat_template_kwargs.enable_thinking`.
+    disable_thinking: bool = True
 
     @field_validator("base_url")
     @classmethod
