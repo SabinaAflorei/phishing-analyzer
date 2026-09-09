@@ -13,7 +13,7 @@ from triage.analyzer import (
     score_of,
 )
 from triage.parser import ParsedAttachment, ParsedEmail, ParsedLink, ReportKind
-from triage.verdicts import Verdict
+from triage.verdicts import Severity, Verdict
 
 
 def codes(parsed: ParsedEmail) -> set[str]:
@@ -491,6 +491,63 @@ def test_semnale_coroborate_sub_prag_dau_needs_review_cu_incredere_mai_mare() ->
     assert result.verdict == Verdict.NEEDS_REVIEW
     assert result.confidence == 0.6
     assert "CORROBORATED_SIGNALS" in {ev.code for ev in result.evidence}
+
+
+def test_nepotrivirile_de_rutare_singure_nu_dau_malicious() -> None:
+    """Marginea de jos a benzii de coroborare, pusa in cui.
+
+    Reply-To + Return-Path + display-name nepotrivit inseamna doar ca mesajul e
+    rutat altfel decat pare - forma pe care o are ORICE newsletter trimis printr-un
+    furnizor de mail. Niciun semnal nu spune nimic despre continut: nu se cere
+    nimic, nu se ascunde niciun link, nu e niciun atasament.
+
+    La ponderile vechi trio-ul facea exact 1.00 si iesea MALICIOUS, adica "sterge
+    mesajul, e periculos" trimis unui coleg pentru un mail de marketing. Testul
+    exista ca sa nu se intoarca printr-o recalibrare facuta din alt motiv.
+    """
+    parsed = ParsedEmail(
+        report_kind=ReportKind.UNKNOWN,
+        from_address="stiri@buletin-informativ.ro",
+        from_display_name="Newsletter ctce.ro",
+        reply_to="raspuns@redactie.ro",
+        return_path="<bounce-9931@mailer-furnizor.net>",
+        subject="Buletinul saptamanii",
+        body_text="Articolele saptamanii. Va puteti dezabona oricand.",
+    )
+    result = analyze(parsed)
+    codes = {ev.code for ev in result.evidence}
+
+    assert codes >= {"REPLY_TO_MISMATCH", "RETURN_PATH_MISMATCH", "DISPLAY_NAME_MISMATCH"}
+    assert score_of(result.evidence) < MALICIOUS_THRESHOLD
+    assert result.verdict != Verdict.MALICIOUS
+
+
+def test_semnalele_de_continut_duc_peste_prag_fara_niciun_semnal_grav() -> None:
+    """Marginea de sus: coroborarea CHIAR are voie sa ajunga la MALICIOUS.
+
+    Forma cazului 08 din corpus - phishing de credentiale printr-un forward, unde
+    Authentication-Results nu supravietuieste, deci nu exista niciun semnal
+    CRITICAL sau HIGH. Verdictul se sustine din semnale de continut: numele afisat
+    minte, linkul duce altundeva decat scrie, se cer datele de autentificare.
+
+    Perechea cu testul de mai sus e ideea intreaga a sectiunii 6.3: nu conteaza
+    CATE semnale sunt, conteaza daca vreunul spune ceva despre ce vrea mesajul de
+    la om.
+    """
+    parsed = ParsedEmail(
+        report_kind=ReportKind.UNKNOWN,
+        from_address="office@securitate-conturi.info",
+        from_display_name="Suport ctce.ro",
+        subject="Contul dumneavoastra expira in 24 de ore",
+        body_text="Confirmati contul si introduceti parola pentru a evita suspendarea.",
+        links=[ParsedLink(text="ctce.ro/cont", href="https://securitate-conturi.info/login")],
+    )
+    result = analyze(parsed)
+    severities = {ev.severity for ev in result.evidence}
+
+    assert Severity.CRITICAL not in severities and Severity.HIGH not in severities
+    assert score_of(result.evidence) >= MALICIOUS_THRESHOLD
+    assert result.verdict == Verdict.MALICIOUS
 
 
 def test_toate_codurile_de_semnal_au_pondere() -> None:

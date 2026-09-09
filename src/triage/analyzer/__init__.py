@@ -104,7 +104,15 @@ SIGNAL_WEIGHT: dict[str, float] = {
     "DISPLAY_NAME_MISMATCH": 0.4,
     "LINK_TEXT_MISMATCH": 0.4,
     "REPLY_TO_MISMATCH": 0.3,
-    "RETURN_PATH_MISMATCH": 0.3,
+    # Mai mica decat Reply-To, si nu din intamplare. Reply-To e o alegere: cineva
+    # a scris acolo unde vrea sa ajunga raspunsul. Return-Path e traseul de retur,
+    # si difera legitim la ORICE mesaj trimis printr-un furnizor de mail - nu doar
+    # pe listele pe care le exceptam explicit. La 0.3, trio-ul de nepotriviri de
+    # rutare (Reply-To + Return-Path + display-name) atingea exact 1.00 si iesea
+    # MALICIOUS fara nicio dovada despre CONTINUTUL mesajului: forma tipica a unui
+    # newsletter tranzactional, nu a unui atac. La 0.2 ajunge la 0.90, adica
+    # NEEDS_REVIEW - decide un analist. Vezi test_analyzer, sectiunea de praguri.
+    "RETURN_PATH_MISMATCH": 0.2,
     # semnale de continut: pondere mica, dar coroboranta (sectiunea 6.3)
     "CREDENTIAL_REQUEST": 0.25,
     "HIGH_RISK_TLD": 0.2,
