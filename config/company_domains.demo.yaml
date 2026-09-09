@@ -1,0 +1,14 @@
+# — pentru generarea de screenshot-uri demo
+owned_domains:
+  - exemplu-corp.ro
+  - exemplu-corp-it.ro
+mail_infrastructure:
+  - mail1.exemplu-corp.ro
+trusted_partners:
+  - partener-demo.ro
+company_name_hints:
+  - exemplu corp
+report_mailbox: itsec@exemplu-corp.ro
+high_risk_tlds:
+  - .ru
+  - .online
