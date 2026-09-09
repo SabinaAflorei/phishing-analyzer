@@ -356,3 +356,24 @@ def test_mail_gol_nu_arunca() -> None:
     parsed = parse_report(b"")
     assert parsed.report_kind == ReportKind.UNKNOWN
     assert parsed.body_text == ""
+
+
+def test_quoted_printable_nu_se_decodeaza_de_doua_ori() -> None:
+    """`get_payload(decode=True)` aplica deja CTE-ul.
+
+    O a doua trecere prin quopri, cum era inainte, strica textul deja decodat:
+    "100=200" devenea "100 0" si "=41" devenea "A". Semnele "=" din corpul unui
+    mail sunt banale (preturi, formule, token-uri in URL), deci greseala se
+    vedea direct in ce citea analistul si in ce ajungea la model.
+    """
+    raw = (
+        b"From: a@exemplu.ro\n"
+        b"Content-Type: text/plain; charset=utf-8\n"
+        b"Content-Transfer-Encoding: quoted-printable\n"
+        b"\n"
+        b"Pretul este 100=3D200 lei, iar codul =3D41 ramane text.\n"
+    )
+    parsed = parse_report(raw)
+
+    assert "100=200 lei" in parsed.body_text
+    assert "=41 ramane text" in parsed.body_text

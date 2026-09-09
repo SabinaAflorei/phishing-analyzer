@@ -7,7 +7,6 @@ import binascii
 import email.utils
 import hashlib
 import io
-import quopri
 import re
 import urllib.parse
 import zipfile
@@ -147,14 +146,16 @@ def _clean_body_text(raw_text: str) -> str:
 
 
 def _decode_part_payload(part: Message) -> str:
-    """Decodeaza payload-ul unei parti, avand grija de Quoted-Printable si charset."""
+    """Decodeaza payload-ul unei parti. Content-Transfer-Encoding il face stdlib.
+
+    `get_payload(decode=True)` aplica DEJA base64 / quoted-printable. O a doua
+    trecere prin quopri, cum era aici, strica textul deja decodat: "100=200 lei"
+    devenea "100 0 lei", iar un "=41" scris de om devenea "A". Aici ramane doar
+    ce nu face stdlib - alegerea charset-ului.
+    """
     payload = part.get_payload(decode=True)
     if not isinstance(payload, bytes) or not payload:
         return ""
-
-    if str(part.get("Content-Transfer-Encoding", "")).lower() == "quoted-printable":
-        with suppress(Exception):
-            payload = quopri.decodestring(payload)
 
     charset = part.get_content_charset() or "utf-8"
     for enc in (charset, "utf-8", "iso-8859-1", "windows-1250"):
