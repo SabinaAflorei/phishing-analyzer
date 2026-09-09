@@ -803,3 +803,12 @@ code, .mono {
 @media (max-width: 34rem) {
   .drop-result__meta > div { grid-template-columns: 1fr; gap: 0; }
 }
+
+.drop-result__conv {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  padding: 0 var(--s2);
+}

@@ -8,6 +8,7 @@ ce filtra, si statusul care disparea la refresh.
 from __future__ import annotations
 
 import pytest
+from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -15,6 +16,7 @@ from fastapi.testclient import TestClient
 from triage import db
 from triage.dashboard.app import app
 from triage.db import session
+from triage.msg_convert import OLE_MAGIC
 from triage.pipeline import ingest_bytes
 
 # Testele de aici pornesc o bucla de evenimente prin TestClient. Pe Windows,
@@ -314,12 +316,53 @@ def test_incarcarea_aceluiasi_fisier_nu_dubleaza() -> None:
         assert len(db.list_reports(s)) == 1
 
 
-def test_incarcarea_unui_msg_explica_ce_are_de_facut() -> None:
-    """.msg e OLE, nu RFC822. Conversia e unealta separata, nu dependinta de runtime."""
-    response = _upload("raportare.msg", b"\xd0\xcf\x11\xe0oleole")
+def test_msg_ul_se_converteste_automat() -> None:
+    """Formatul se recunoaste din continut, iar .msg intra ca .eml fara pasi manuali."""
+    msg = Path("corpus/msg/1.msg")
+    if not msg.is_file():
+        pytest.skip("corpus/msg/ lipseste")
+
+    response = client.post(
+        "/upload",
+        files={"files": ("raportare.msg", msg.read_bytes(), "application/octet-stream")},
+    )
 
     assert response.status_code == 200
-    assert "msg_to_eml.py" in response.text
+    assert "convertit din raportare.msg" in response.text
+    assert "raportare.eml" in response.text, "numele trebuie sa devina .eml"
+    with session() as s:
+        assert len(db.list_reports(s)) == 1
+
+
+def test_msg_ul_e_recunoscut_chiar_daca_extensia_minte() -> None:
+    """Extensia o alege cel care trimite; semnatura OLE nu."""
+    msg = Path("corpus/msg/1.msg")
+    if not msg.is_file():
+        pytest.skip("corpus/msg/ lipseste")
+
+    response = _upload("pare-eml.eml", msg.read_bytes())
+
+    assert response.status_code == 200
+    assert "convertit din" in response.text
+    with session() as s:
+        assert len(db.list_reports(s)) == 1
+
+
+def test_msg_stricat_nu_doboara_pagina() -> None:
+    response = _upload("stricat.msg", OLE_MAGIC + b"nu e un .msg valid")
+
+    assert response.status_code == 200
+    assert "nu a putut fi convertit" in response.text
+    with session() as s:
+        assert db.list_reports(s) == []
+
+
+def test_fisierul_care_nu_e_email_e_respins() -> None:
+    """Un PDF sau o poza aruncata din greseala nu trebuie sa devina raport."""
+    response = _upload("poza.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
+
+    assert response.status_code == 200
+    assert "Nu pare un e-mail" in response.text
     with session() as s:
         assert db.list_reports(s) == []
 

@@ -18,14 +18,15 @@
 <section class="panel">
   <div class="panel__head">
     <h2>Încarcă un e-mail</h2>
-    <span class="hint">.eml — trece prin exact aceeași analiză ca raportările din coadă</span>
+    <span class="hint">.eml sau .msg — trece prin exact aceeași analiză ca raportările din coadă</span>
   </div>
   <div class="panel__body">
     <div class="dropzone" id="dropzone" tabindex="0" role="button"
-         aria-label="Trage un fișier .eml aici sau apasă pentru a alege">
-      <input type="file" id="dropzone-input" accept=".eml,message/rfc822" multiple hidden>
-      <p class="dropzone__text"><strong>Trage un fișier .eml aici</strong></p>
-      <p class="dropzone__hint">sau apasă ca să alegi din calculator · poți lăsa mai multe odată</p>
+         aria-label="Trage un e-mail aici sau apasă pentru a alege">
+      <input type="file" id="dropzone-input"
+             accept=".eml,.msg,message/rfc822,application/vnd.ms-outlook" multiple hidden>
+      <p class="dropzone__text"><strong>Trage un e-mail aici</strong></p>
+      <p class="dropzone__hint">.eml sau .msg · formatul se recunoaște singur, .msg se convertește automat</p>
     </div>
     <div id="dropzone-results" class="dropzone__results" aria-live="polite"></div>
   </div>

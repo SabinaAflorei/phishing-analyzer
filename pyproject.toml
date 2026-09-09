@@ -41,7 +41,7 @@ mypy_path = "src"
 packages = ["triage"]
 
 [[tool.mypy.overrides]]
-module = ["magic.*", "confusable_homoglyphs.*"]
+module = ["magic.*", "confusable_homoglyphs.*", "extract_msg.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

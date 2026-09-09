@@ -8,6 +8,11 @@
 <article class="drop-result {% if item.error %}drop-result--bad{% endif %}">
   <header class="drop-result__head">
     <span class="drop-result__name">{{ item.name }}</span>
+    {% if item.converted_from %}
+    <span class="drop-result__conv" title="Outlook .msg convertit in RFC822">
+      convertit din {{ item.converted_from }}
+    </span>
+    {% endif %}
     {% if item.report %}
     <span class="badge badge--{{ item.report.verdict }}">{{ VERDICT_LABELS[item.report.verdict] }}</span>
     <span class="drop-result__conf">{{ (item.report.confidence * 100)|round|int }}% încredere</span>

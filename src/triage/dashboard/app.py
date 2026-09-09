@@ -25,6 +25,11 @@ from sqlalchemy.orm import Session
 from triage import db
 from triage.db import STATUSES, Report, quality_stats, session, to_dict
 from triage.fetcher import save_raw_eml
+from triage.msg_convert import (
+    MsgConversionUnavailable,
+    detect_format,
+    msg_bytes_to_eml,
+)
 from triage.pipeline import ingest_bytes, ingest_once
 from triage.settings import get_settings
 from triage.verdicts import Verdict
@@ -229,19 +234,35 @@ async def upload_reports(request: Request, files: list[UploadFile]) -> HTMLRespo
             )
             continue
 
-        # .msg e format OLE, nu RFC822. Conversia are nevoie de extract-msg, care
-        # e unealta de pregatire a corpusului, nu dependinta de runtime - vezi
-        # requirements-corpus.txt. Spunem exact ce are de facut omul.
-        if name.lower().endswith(".msg"):
+        # Formatul se citeste din CONTINUT, nu din extensie: un mesaj salvat din
+        # Outlook ajunge des redenumit, iar extensia o alege cel care trimite -
+        # deci nu e o dovada. Un .msg se converteste pe loc in .eml, ca pipeline-ul
+        # sa vada mereu RFC822.
+        kind = detect_format(raw)
+        if kind == "unknown":
             results.append(
                 {
                     "name": name,
-                    "error": "Format Outlook .msg. Convertește-l întâi: "
-                    "python3 scripts/msg_to_eml.py "
-                    f"{name} -o corpus/eml/{name[:-4]}.eml",
+                    "error": "Nu pare un e-mail: nici .eml (RFC822), nici .msg (Outlook).",
                 }
             )
             continue
+
+        converted_from = ""
+        if kind == "msg":
+            try:
+                raw = msg_bytes_to_eml(raw)
+            except MsgConversionUnavailable as err:
+                results.append({"name": name, "error": str(err)})
+                continue
+            except Exception:
+                logger.exception("Conversia .msg a esuat: %s", name)
+                results.append(
+                    {"name": name, "error": "Fișierul .msg nu a putut fi convertit."}
+                )
+                continue
+            converted_from = name
+            name = f"{Path(name).stem}.eml"
 
         try:
             digest = hashlib.sha256(raw).hexdigest()
@@ -268,6 +289,7 @@ async def upload_reports(request: Request, files: list[UploadFile]) -> HTMLRespo
                 results.append(
                     {
                         "name": name,
+                        "converted_from": converted_from,
                         "duplicate": True,
                         "report": to_dict(existing) if existing else None,
                     }
@@ -276,7 +298,13 @@ async def upload_reports(request: Request, files: list[UploadFile]) -> HTMLRespo
 
         with session() as s:
             fresh = db.get_report(s, report.id)
-            results.append({"name": name, "report": to_dict(fresh) if fresh else None})
+            results.append(
+                {
+                    "name": name,
+                    "converted_from": converted_from,
+                    "report": to_dict(fresh) if fresh else None,
+                }
+            )
 
     logger.info("Incarcare din dashboard: %d fisiere", len(results))
     return templates.TemplateResponse(request, "_upload_result.html", {"results": results})
