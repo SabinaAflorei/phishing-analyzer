@@ -143,7 +143,7 @@ def ingest_file(
     )
 
 
-def _llm_for_run(cfg: Settings) -> Any:
+def llm_for_run(cfg: Settings) -> Any:
     """Clientul, dar numai daca Ollama chiar raspunde.
 
     Fara proba asta, fiecare mail din coada isi scria propriul avertisment ca
@@ -171,7 +171,7 @@ def ingest_corpus(
     """Toate .eml-urile din corpus. Rulabila de oricate ori: nu duplica nimic."""
     cfg = settings if settings is not None else get_settings()
     directory = corpus_dir if corpus_dir is not None else default_corpus_dir()
-    llm_client = _llm_for_run(cfg)
+    llm_client = llm_for_run(cfg)
     result = IngestResult()
 
     for path in fetch_from_corpus(directory):
@@ -196,7 +196,7 @@ def ingest_imap(*, settings: Settings | None = None) -> IngestResult:
     from triage.fetcher import fetch_from_imap  # import tarziu: imaplib e greu
 
     cfg = settings if settings is not None else get_settings()
-    llm_client = _llm_for_run(cfg)
+    llm_client = llm_for_run(cfg)
     result = IngestResult()
 
     for message in fetch_from_imap(

@@ -30,7 +30,7 @@ from triage.msg_convert import (
     detect_format,
     msg_bytes_to_eml,
 )
-from triage.pipeline import ingest_bytes, ingest_once
+from triage.pipeline import ingest_bytes, ingest_once, llm_for_run
 from triage.settings import get_settings
 from triage.verdicts import Verdict
 
@@ -214,6 +214,12 @@ async def upload_reports(request: Request, files: list[UploadFile]) -> HTMLRespo
     loc, ca sa vezi verdictul fara sa pierzi coada din ochi.
     """
     cfg = get_settings()
+    # Clientul de model se construieste O DATA per cerere, nu per fisier: `available()`
+    # e o proba pe retea, iar un drop cu zece fisiere ar face zece probe identice.
+    # Fara el, `generate_draft` primea None si scria MEREU din sablonul static, si
+    # pe o masina cu modelul pornit - exact ce nu voiai sa vezi cand incarci un mail
+    # ca sa verifici cum raspunde sistemul.
+    llm_client = llm_for_run(cfg)
     results: list[dict[str, Any]] = []
 
     for upload in files:
@@ -275,6 +281,7 @@ async def upload_reports(request: Request, files: list[UploadFile]) -> HTMLRespo
                 source="upload",
                 source_ref=name,
                 raw_eml_path=str(destination),
+                llm_client=llm_client,
                 settings=cfg,
             )
         except Exception:

@@ -432,3 +432,29 @@ def test_mai_multe_fisiere_odata() -> None:
     assert "Simulare" in response.text
     with session() as s:
         assert len(db.list_reports(s)) == 2
+
+
+def test_incarcarea_foloseste_modelul_cand_e_disponibil(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regresie: /upload nu pasa deloc clientul de model catre ingest_bytes.
+
+    `generate_draft` incearca modelul doar `if llm_client is not None`, deci
+    ciornele veneau MEREU din sablonul static - si pe o masina cu modelul pornit.
+    Fix-ul nu se vede in niciun test de verdict, doar aici.
+    """
+
+    class ModelFals:
+        def generate(self, system_prompt: str, prompt: str, temperature: float | None = None) -> str:
+            return "Bună ziua, Ana,\n\nScris de model, nu din șablon.\n\nCu stimă,"
+
+        def available(self) -> bool:
+            return True
+
+    monkeypatch.setattr("triage.dashboard.app.llm_for_run", lambda cfg: ModelFals())
+
+    response = _upload("phish.eml", PHISHING)
+
+    assert response.status_code == 200
+    with session() as s:
+        report = db.list_reports(s)[0]
+        assert report.draft_source == "llm", "ciorna trebuie sa vina de la model"
+        assert "Scris de model" in report.draft

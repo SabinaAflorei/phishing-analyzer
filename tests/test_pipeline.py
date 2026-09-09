@@ -416,25 +416,25 @@ def test_ingest_once_alege_sursa_din_config(
 def test_o_singura_proba_de_ollama_pe_rulare(monkeypatch: pytest.MonkeyPatch) -> None:
     """Un avertisment pe rulare, nu unul per mail. Doisprezece WARNING-uri la
     prima pornire arata a sistem stricat, cand de fapt e fallback-ul documentat."""
-    from triage.pipeline import _llm_for_run
+    from triage.pipeline import llm_for_run
     from triage.settings import LLMSettings, Settings
 
     probe: list[int] = []
     monkeypatch.setattr("triage.llm.OllamaClient.available", lambda self: probe.append(1) or False)
 
-    assert _llm_for_run(Settings(llm=LLMSettings(enabled=True))) is None
+    assert llm_for_run(Settings(llm=LLMSettings(enabled=True))) is None
     assert len(probe) == 1
 
 
 def test_ollama_oprit_din_config_nu_se_probeaza(monkeypatch: pytest.MonkeyPatch) -> None:
-    from triage.pipeline import _llm_for_run
+    from triage.pipeline import llm_for_run
     from triage.settings import LLMSettings, Settings
 
     def nu_trebuie_chemat(self: object) -> bool:
         raise AssertionError("nu se probeaza cand LLM-ul e oprit din config")
 
     monkeypatch.setattr("triage.llm.OllamaClient.available", nu_trebuie_chemat)
-    assert _llm_for_run(Settings(llm=LLMSettings(enabled=False))) is None
+    assert llm_for_run(Settings(llm=LLMSettings(enabled=False))) is None
 
 
 def test_retry_ul_imap_vine_din_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
