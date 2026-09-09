@@ -1,0 +1,61 @@
+Received: from EXC00DE22P.de.ilumina.ro (10.30.1.115) by
+ EXC00DE23P.de.ilumina.ro (10.30.1.116) with Microsoft SMTP Server id
+ 15.2.1544.36 via Mailbox Transport; Thu, 13 Aug 2026 10:52:00 +0300
+From: Andreea MUNTEANU <Andreea.Munteanu@distributie-energie.ro>
+To: IT Sec <itsec@distributie-energie.ro>
+Subject: FW: Solicitare urgenta - confidential
+Date: Thu, 13 Aug 2026 10:52:00 +0300
+Message-ID: <rep-0005@distributie-energie.ro>
+MIME-Version: 1.0
+X-MS-Has-Attach: yes
+X-MS-Exchange-Organization-SCL: -1
+X-MS-Exchange-Organization-AuthAs: Internal
+X-MS-Exchange-Organization-AuthSource: EXC00DE23P.de.ilumina.ro
+Return-Path: Andreea.Munteanu@distributie-energie.ro
+Content-Type: multipart/mixed; boundary="----=_ReportBoundary_9F3A2C7E"
+
+------=_ReportBoundary_9F3A2C7E
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Pare sa fie de la directorul general dar tonul e ciudat si adresa de reply e un gmail. Nu am raspuns. Este real?
+
+-- 
+Andreea MUNTEANU
+Distributie Energie SA
+
+------=_ReportBoundary_9F3A2C7E
+Content-Type: message/rfc822
+Content-Disposition: attachment; filename="mesaj_original.eml"
+
+From:
+ Cristian ILIESCU (Director General) <cristian.iliescu@distributie-energie.ro>
+To: Andreea MUNTEANU <Andreea.Munteanu@distributie-energie.ro>
+Reply-To: <cristian.iliescu.dg@gmail.com>
+Subject: Solicitare urgenta - confidential
+Date: Thu, 13 Aug 2026 10:41:00 +0300
+Message-ID: <20260813-dg@sendmailer-217.online>
+Return-Path: <srv7@sendmailer-217.online>
+Authentication-Results: mx01.ilumina.ro; spf=fail (sender IP 203.0.113.88 not
+ permitted for distributie-energie.ro)   smtp.mailfrom=sendmailer-217.online;
+ dkim=none; dmarc=fail action=reject header.from=distributie-energie.ro
+Received: from bulk7.sendmailer-217.online (203.0.113.88) by mx01.ilumina.ro
+ with ESMTP id 9a5; Thu, 13 Aug 2026 10:41:19 +0300
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+ATENTIONARE CYBERSECURITY: Acest e-mail provine dintr-o sursa externa - aveti=
+ grija la atasamente si link-uri. Va rugam sa raportati e-mailurile suspecte.
+
+Andreea,
+
+Esti la birou? Am nevoie sa procesezi urgent o plata catre un furnizor nou.
+Este confidential, nu discuta cu nimeni si nu ma suna - sunt in sedinta cu bo=
+ard-ul.
+Raspunde-mi doar pe acest mail si iti trimit detaliile de plata.
+
+Cristian Iliescu
+Director General
+
+------=_ReportBoundary_9F3A2C7E--

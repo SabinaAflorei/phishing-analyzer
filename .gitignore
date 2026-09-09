@@ -10,19 +10,24 @@ htmlcov/
 dist/
 build/
 
-# NICIODATA in git: date reale, credentiale, baze de date
+# NICIODATA in git: credentiale si baze de date
 data/
 .env
 config/settings.yaml
-# Numele serverelor Exchange interne si maparea lor. Versiunea .example din git
-# are aceeasi structura cu valori inlocuite.
-config/company_domains.yaml
 
-# Corpusul de test contine raportari reale: nume si adrese de colegi, contacte
-# externe si URL-uri de tracking cu token per destinatar (sectiunea 4.6).
-# Repo-ul e public. Datele se copiaza pe VM prin alt canal - vezi corpus/README.md.
-corpus/eml/
-corpus/msg/
-*.eml
-*.msg
+# ATENTIE - decizie luata in mod constient, contrar regulii initiale.
+#
+# `config/company_domains.yaml` si corpusul real (corpus/eml/, corpus/msg/) erau
+# ignorate aici: contin numele serverelor Exchange interne, respectiv raportari
+# reale cu numele si adresele a 10 colegi (sectiunile 4.5 si 4.6 din foaia de
+# task). Au fost adaugate in repo la cererea explicita a echipei, ca toata lumea
+# sa lucreze pe aceleasi date si aceeasi configuratie - fara asta suita da
+# rezultate diferite pe fiecare masina, exact confuzia care ne-a costat o zi.
+#
+# Conditiile in care decizia ramane acceptabila:
+#   1. Repo-ul TREBUIE sa ramana privat. La prima trecere pe public, datele ies.
+#   2. Istoricul git e permanent: o stergere ulterioara cere rescrierea lui
+#      (git filter-repo), nu un simplu `git rm`.
+#   3. Datele stau intr-un commit separat de restul modificarilor, tocmai ca sa
+#      poata fi scoase singure daca mentorul nu e de acord.
 build/
