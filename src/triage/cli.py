@@ -4,7 +4,9 @@
     triage poll                # ingestie la interval, pana la Ctrl+C
     triage list --status NEW   # ce e in coada
     triage show 3              # un raport din baza de date
-    triage check mail.eml      # analizeaza un .eml fara sa il salveze
+    triage show 3 --draft      # doar ciorna, ca sa o poti trece prin pipe
+    triage stats               # metricile de calitate din 8.4
+    triage check mail.eml      # analizeaza un .eml sau .msg fara sa il salveze
 
 `check` e singura comanda care nu atinge baza de date: e pentru cand vrei sa
 vezi repede ce zice analizorul despre un fisier, fara sa il bagi in coada.
@@ -13,6 +15,7 @@ vezi repede ce zice analizorul despre un fisier, fara sa il bagi in coada.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import logging
 import sys
@@ -22,10 +25,11 @@ from typing import Any
 
 from triage import db
 from triage.analyzer import analyze, score_of
-from triage.db import dump_json, session, to_dict
+from triage.db import dump_json, quality_stats, session, to_dict
 from triage.defang import defang
 from triage.drafter import generate_draft
 from triage.llm import build_llm_client
+from triage.msg_convert import MsgConversionUnavailable, looks_like_msg, msg_bytes_to_eml
 from triage.parser import parse_report
 from triage.pipeline import ingest_once
 from triage.settings import get_settings
@@ -89,6 +93,12 @@ def cmd_show(args: argparse.Namespace) -> int:
         if report is None:
             print(f"Nu exista raportul {args.report_id}.", file=sys.stderr)
             return 1
+        if args.draft:
+            # Doar textul, fara chenare: `triage show 3 --draft | clip` sau
+            # `| xclip` pune ciorna direct in clipboard. Analistul o lipeste in
+            # clientul lui de mail - sistemul tot nu trimite nimic.
+            print(to_dict(report)["draft"])
+            return 0
         if args.json:
             print(dump_json(report))
             return 0
@@ -107,7 +117,24 @@ def cmd_check(args: argparse.Namespace) -> int:
         return 1
 
     settings = get_settings()
-    parsed = parse_report(path.read_bytes())
+    raw = path.read_bytes()
+
+    # Un .msg salvat din Outlook se converteste pe loc, ca analizorul sa vada
+    # mereu RFC822. Recunoasterea e pe CONTINUT (semnatura OLE), nu pe extensie:
+    # extensia o alege cel care trimite fisierul, deci nu e o dovada.
+    #
+    # Orice ALTCEVA trece neatins la parser, inclusiv gunoi. Spre deosebire de
+    # dropzone-ul din dashboard - unde cineva chiar poate trage din greseala o
+    # poza - aici operatorul a numit fisierul explicit, iar criteriul 8.3 cere ca
+    # un mail malformat sa fie analizat, nu respins.
+    if looks_like_msg(raw):
+        try:
+            raw = msg_bytes_to_eml(raw)
+        except MsgConversionUnavailable as err:
+            print(f"Eroare: {err}", file=sys.stderr)
+            return 1
+
+    parsed = parse_report(raw)
     analysis = analyze(parsed)
     draft = generate_draft(
         analysis,
@@ -143,6 +170,56 @@ def cmd_check(args: argparse.Namespace) -> int:
         print(json.dumps({**data, "evidence": evidence}, indent=2, ensure_ascii=False))
     else:
         _print_report(data, evidence)
+    return 0
+
+
+def cmd_stats(args: argparse.Namespace) -> int:
+    """Metricile de calitate din 8.4, din baza de date.
+
+    Existau deja, calculate de `quality_stats`, dar se vedeau doar din browser.
+    Matricea de corectii e informatia care spune unde sa te uiti: care verdict
+    automat e cel mai des schimbat de analist, si in ce. Ponderile din
+    SIGNAL_WEIGHT se calibreaza dupa ea, nu dupa intuitie.
+    """
+    with session() as s:
+        stats = quality_stats(s)
+
+    if args.json:
+        print(json.dumps(stats, indent=2, ensure_ascii=False))
+        return 0
+
+    if not stats["total_reports"]:
+        print("Baza de date e goala. Ruleaza `triage ingest`.")
+        return 0
+
+    print(RULER)
+    print("Calitate")
+    print(RULER)
+    print(f"Rapoarte:            {stats['total_reports']}")
+    print(f"Ciorne trimise:      {stats['total_drafts_sent']}")
+    print(f"Acceptate nemodif.:  {stats['unchanged_drafts']} ({stats['acceptance_rate']:.1f}%)")
+    print(f"Verdicte corectate:  {stats['overrides_count']} ({stats['correction_rate']:.1f}%)")
+
+    print("-" * 68)
+    print("Distributia verdictelor:")
+    for verdict, count in stats["verdict_distribution"].items():
+        print(f"  {verdict:<14} {count:>4}")
+
+    print("-" * 68)
+    print("Pe status:")
+    for status, count in stats["by_status"].items():
+        print(f"  {status:<14} {count:>4}")
+
+    print("-" * 68)
+    matrix = stats["correction_matrix"]
+    print("Matrice de corectii (automat -> corectat de analist):")
+    if not matrix:
+        print("  Niciun verdict corectat inca.")
+    else:
+        for auto, targets in matrix.items():
+            for corrected, count in sorted(targets.items(), key=lambda kv: -kv[1]):
+                print(f"  {auto:<14} -> {corrected:<14} {count:>4}")
+    print(RULER)
     return 0
 
 
@@ -205,10 +282,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_show = sub.add_parser("show", help="un raport din baza de date")
     p_show.add_argument("report_id", type=int)
     p_show.add_argument("--json", action="store_true")
+    p_show.add_argument("--draft", action="store_true", help="doar ciorna, fara chenare")
     p_show.set_defaults(func=cmd_show)
 
-    p_check = sub.add_parser("check", help="analizeaza un .eml fara sa il salveze")
-    p_check.add_argument("eml_file", type=Path)
+    p_stats = sub.add_parser("stats", help="metricile de calitate (8.4)")
+    p_stats.add_argument("--json", action="store_true")
+    p_stats.set_defaults(func=cmd_stats)
+
+    p_check = sub.add_parser("check", help="analizeaza un .eml sau .msg fara sa il salveze")
+    p_check.add_argument("eml_file", type=Path, help="fisier .eml sau .msg")
     p_check.add_argument("--json", action="store_true")
     p_check.add_argument("--llm", action="store_true", help="cere ciorna de la Ollama")
     p_check.set_defaults(func=cmd_check)
@@ -216,7 +298,22 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _force_utf8_output() -> None:
+    """Tot ce scrie CLI-ul e in romana, cu diacritice.
+
+    Pe Windows, stdout-ul implicit e cp1252, care nu are 'ă'. Orice comanda care
+    tiparea un verdict, o dovada sau o ciorna cadea cu UnicodeEncodeError inainte
+    sa termine de scris - `triage show`, `triage check` si `triage list`
+    deopotriva. Nu e o optiune de configurare: fisierul sursa e UTF-8, dovezile
+    sunt UTF-8, deci si iesirea trebuie sa fie.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_output()
     args = build_parser().parse_args(argv)
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
