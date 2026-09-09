@@ -47,6 +47,7 @@ def test_directorul_cu_date_e_exclus_din_backup(tmp_path: Path) -> None:
     assert tag.read_text(encoding="utf-8").startswith("Signature: 8a477f597d28d172789f06886806bc55")
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="permisiuni POSIX")
 def test_permisiuni_restrictive_pe_baza_de_date(tmp_path: Path) -> None:
     from triage.db import use_database
 

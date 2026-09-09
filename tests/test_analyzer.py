@@ -20,6 +20,37 @@ def codes(parsed: ParsedEmail) -> set[str]:
     return {ev.code for ev in analyze(parsed).evidence}
 
 
+@pytest.fixture(autouse=True)
+def _domenii_fixe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Testele din acest fisier isi fixeaza singure domeniile companiei.
+
+    Cazurile de mai jos sunt scrise pe `exemplu.ro`. Analizorul isi citeste
+    domeniile din `config/company_domains.yaml`, care e in .gitignore si contine
+    domeniile REALE pe masina unui operator. Fara fixarea de aici, suita devenea
+    rosie in clipa in care cineva configura sistemul pentru productie - un test
+    de unitate nu are voie sa depinda de configuratia locala a masinii.
+
+    Corpusul ramane pe configuratia ambientala: acolo mesajele si domeniile
+    trebuie sa vina din aceeasi lume ca sa aiba sens.
+    """
+    from triage import analyzer
+
+    monkeypatch.setattr(
+        analyzer, "COMPANY_OWNED", {"exemplu.ro", "intern.exemplu.ro", "exemplu.com"}
+    )
+    monkeypatch.setattr(
+        analyzer,
+        "MAIL_INFRA",
+        {"mail1.exemplu.ro", "mx01.exemplu.com", "exc00aa01p.intern.exemplu.ro"},
+    )
+    monkeypatch.setattr(
+        analyzer,
+        "TRUSTED_PARTNERS",
+        {"microsoft.com", "atlassian.net", "furnizor-newsletter.ro", "ctce.ro"},
+    )
+    monkeypatch.setattr(analyzer, "REPORT_MAILBOX", "itsec@exemplu.ro")
+
+
 # ---------------------------------------------------------------------------
 # Autentificare
 # ---------------------------------------------------------------------------

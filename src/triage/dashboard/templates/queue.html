@@ -12,6 +12,25 @@
   </form>
 </div>
 
+<!-- Banc de proba: un .eml aruncat aici intra pe aceeasi conducta ca restul
+     (parse -> analyze -> draft -> baza de date), ca sa poti vedea imediat cum
+     reactioneaza analizorul la un mesaj nou. -->
+<section class="panel">
+  <div class="panel__head">
+    <h2>Încarcă un e-mail</h2>
+    <span class="hint">.eml — trece prin exact aceeași analiză ca raportările din coadă</span>
+  </div>
+  <div class="panel__body">
+    <div class="dropzone" id="dropzone" tabindex="0" role="button"
+         aria-label="Trage un fișier .eml aici sau apasă pentru a alege">
+      <input type="file" id="dropzone-input" accept=".eml,message/rfc822" multiple hidden>
+      <p class="dropzone__text"><strong>Trage un fișier .eml aici</strong></p>
+      <p class="dropzone__hint">sau apasă ca să alegi din calculator · poți lăsa mai multe odată</p>
+    </div>
+    <div id="dropzone-results" class="dropzone__results" aria-live="polite"></div>
+  </div>
+</section>
+
 <div class="panel">
 
   <!-- Filtrele NAVIGHEAZA. Actiunea in masa MODIFICA. Doua lucruri diferite,
@@ -151,5 +170,72 @@
   });
   for (const box of boxes) box.addEventListener("change", refreshBulkBar);
   refreshBulkBar();
+</script>
+
+<script>
+  // Dropzone. Fara biblioteci: base.html spune ca nimic nu se incarca din retea,
+  // iar fetch + FormData ajung. Fragmentul intors de server se insereaza ca atare
+  // - e generat de Jinja2 cu escapare activa, deci continutul mailului nu poate
+  // deveni marcaj (sectiunea 4.3).
+  (function () {
+    var zone = document.getElementById("dropzone");
+    var input = document.getElementById("dropzone-input");
+    var out = document.getElementById("dropzone-results");
+    if (!zone || !input || !out) return;
+
+    function send(fileList) {
+      if (!fileList || !fileList.length) return;
+      var data = new FormData();
+      for (var i = 0; i < fileList.length; i++) data.append("files", fileList[i]);
+
+      zone.classList.add("is-busy");
+      out.innerHTML = '<p class="hint">Se analizează…</p>';
+
+      fetch("/upload", { method: "POST", body: data })
+        .then(function (r) {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.text();
+        })
+        .then(function (html) {
+          out.innerHTML = html;
+          // Coada de deasupra e acum invechita: raportul nou nu apare in ea
+          // pana la o reincarcare. Nu o fortam - omul citeste intai verdictul.
+          var again = document.createElement("p");
+          again.className = "hint";
+          again.innerHTML = '<a href="/">Reîncarcă coada</a> ca să vezi raportul în listă.';
+          out.appendChild(again);
+        })
+        .catch(function (err) {
+          out.innerHTML = '<p class="drop-result drop-result--bad">Încărcarea a eșuat: ' +
+            String(err.message) + "</p>";
+        })
+        .finally(function () {
+          zone.classList.remove("is-busy");
+          input.value = "";
+        });
+    }
+
+    ["dragenter", "dragover"].forEach(function (evt) {
+      zone.addEventListener(evt, function (e) {
+        e.preventDefault();
+        zone.classList.add("is-over");
+      });
+    });
+    ["dragleave", "drop"].forEach(function (evt) {
+      zone.addEventListener(evt, function (e) {
+        e.preventDefault();
+        zone.classList.remove("is-over");
+      });
+    });
+
+    zone.addEventListener("drop", function (e) {
+      send(e.dataTransfer && e.dataTransfer.files);
+    });
+    zone.addEventListener("click", function () { input.click(); });
+    zone.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); }
+    });
+    input.addEventListener("change", function () { send(input.files); });
+  })();
 </script>
 {% endblock %}

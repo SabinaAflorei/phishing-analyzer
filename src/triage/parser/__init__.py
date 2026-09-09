@@ -271,7 +271,7 @@ def _archive_is_encrypted(payload: bytes) -> bool:
 def detect_report_kind(raw: bytes) -> ReportKind:
     msg = message_from_bytes(raw)
     has_image = False
-    has_text = False
+    text_parts: list[str] = []
 
     for part in msg.walk():
         content_type = part.get_content_type()
@@ -283,9 +283,16 @@ def detect_report_kind(raw: bytes) -> ReportKind:
         elif content_type == "text/plain":
             body = part.get_payload(decode=True)
             if isinstance(body, bytes) and body.strip():
-                has_text = True
+                text_parts.append(body.decode("utf-8", "replace"))
 
-    if has_image and not has_text:
+    # O raportare prin captura de ecran are aproape mereu si un rand de insotire
+    # scris de coleg ("va trimit acest mesaj suspect") plus semnatura Outlook cu
+    # logo. Conditia veche - imagine SI ZERO text - nu se implineste niciodata pe
+    # o raportare reala, deci semnalul nu se producea. Ce separa cu adevarat
+    # cazul e ca nu exista mesaj original de analizat: nici .eml atasat (tratat
+    # mai sus), nici bloc de headere citat in corp. Ramane doar poza, pe care nu
+    # o deschidem si nu o interpretam - deci decide un analist.
+    if has_image and not extract_forwarded_headers("\n\n".join(text_parts)):
         return ReportKind.SCREENSHOT_ONLY
 
     subject = decode_mime_header(msg.get("Subject", "")).lower()

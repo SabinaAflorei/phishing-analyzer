@@ -40,7 +40,7 @@ from email.message import EmailMessage
 from email.parser import HeaderParser
 from email.policy import SMTP
 from pathlib import Path
-from triage.storage import save_secure_file
+from triage.secure_files import save_secure_file
 from typing import Any
 
 

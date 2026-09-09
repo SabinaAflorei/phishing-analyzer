@@ -57,6 +57,7 @@ addopts = """
 asyncio_default_fixture_loop_scope = "function"
 markers = [
     "needs_ollama: test care are voie sa vorbeasca cu Ollama pe 127.0.0.1",
+    "needs_loopback: test care porneste o bucla de evenimente (doar loopback, nimic extern)",
 ]
 
 [tool.coverage.report]

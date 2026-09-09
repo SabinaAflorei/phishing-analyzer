@@ -13,6 +13,8 @@ Pe o masina fara el, testele se sar cu un mesaj clar in loc sa pice.
 
 from __future__ import annotations
 
+import sys
+
 import email
 from email import policy
 from pathlib import Path
@@ -81,6 +83,7 @@ def test_eml_se_parseaza(case: str) -> None:
 
 
 @_no_corpus
+@pytest.mark.skipif(sys.platform == "win32", reason="permisiuni POSIX")
 @pytest.mark.parametrize("case", _cases())
 def test_eml_e_privat(case: str) -> None:
     """Continut sensibil: 600, ca in sectiunea 4.5."""

@@ -348,6 +348,17 @@ def _header_consistency_evidence(parsed: ParsedEmail) -> list[Evidence]:
     if not from_domain:
         return found
 
+    # Pe un forward inline, From-ul e reconstruit din blocul de headere citat in
+    # corp (mesajul ORIGINAL), in timp ce Reply-To si Return-Path raman cele ale
+    # mesajului colegului care a raportat - clientul de mail nu citeaza headerele
+    # de transport. Comparatia ar pune fata in fata doua mesaje diferite, iar
+    # Return-Path ar fi mereu domeniul propriu: semnal fals pe FIECARE raportare
+    # prin forward. Nu avem headerele de transport ale originalului, deci nu
+    # afirmam nimic despre ele. La ATTACHED_EML mesajul original e complet, cu
+    # headerele lui, si comparatia se face normal.
+    if parsed.headers_from_body:
+        return found
+
     # Pe listele de mail, Return-Path e adresa de bounce a platformei si difera
     # legitim de From. Nu semnalam acolo.
     is_mailing_list = any(name in {"list-unsubscribe", "list-id"} for name in parsed.header_names)
@@ -412,6 +423,35 @@ def _display_name_evidence(parsed: ParsedEmail) -> list[Evidence]:
     ]
 
 
+_RECEIVED_FROM_RE = re.compile(r"^\s*from\s+(?P<host>[^\s;(]+)", re.IGNORECASE)
+
+
+def _originated_internally(received_chain: list[str]) -> bool:
+    """A PLECAT mesajul din infrastructura proprie?
+
+    Nu "a atins-o pe undeva". Headerele Received se adauga in varf, deci ultimul
+    din lista e primul hop - originea. Doar acolo se poate citi de unde a plecat
+    mesajul.
+
+    Varianta veche cauta orice hostname propriu oriunde in tot lantul. Dar orice
+    mesaj primit din exterior e primit DE catre MX-ul propriu, iar hostname-ul
+    lui apare in clauza `by` a fiecarui mesaj care intra in organizatie - inclusiv
+    al unuia care ne falsifica domeniul. Semnalul cel mai puternic din analizor
+    (pondere 1.0) nu se declansa practic niciodata. Se citeste doar clauza `from`
+    a hopului de origine.
+
+    Lant gol: nu avem de unde sti, si atunci nu afirmam ca a plecat din interior.
+    """
+    if not received_chain:
+        return False
+    origin = " ".join(received_chain[-1].split())
+    match = _RECEIVED_FROM_RE.match(origin)
+    if not match:
+        return False
+    origin_host = match.group("host").lower()
+    return any(host == origin_host or origin_host.endswith(f".{host}") for host in MAIL_INFRA)
+
+
 def _domain_evidence(parsed: ParsedEmail) -> list[Evidence]:
     """Spoofing intern, lookalike, homoglife/punycode si TLD cu risc ridicat."""
     found: list[Evidence] = []
@@ -427,9 +467,11 @@ def _domain_evidence(parsed: ParsedEmail) -> list[Evidence]:
     # forward inline, From vine din corp iar Received e al colegului care a
     # raportat - a compara cele doua inseamna a pune intrebarea "a trecut prin
     # infra noastra?" pe lantul gresit.
-    if claims_owned and not parsed.headers_from_body:
-        received_text = " ".join(parsed.received_chain).lower()
-        if not any(host in received_text for host in MAIL_INFRA):
+    if (
+        claims_owned
+        and not parsed.headers_from_body
+        and not _originated_internally(parsed.received_chain)
+    ):
             found.append(
                 Evidence(
                     code="INTERNAL_DOMAIN_SPOOF",
@@ -767,14 +809,19 @@ def _decide(evidence: list[Evidence]) -> Analysis:
         )
         return Analysis(verdict=Verdict.NEEDS_REVIEW, confidence=0.6, evidence=evidence)
 
-    if not evidence:
-        evidence.append(
-            Evidence(
-                code="INSUFFICIENT_EVIDENCE",
-                severity=Severity.MEDIUM,
-                description="E-mailul nu conține suficiente semnale clare și necesită analiză manuală.",
-            )
+    # Orice NEEDS_REVIEW trebuie sa spuna DE CE se escaladeaza. Banda de mijloc
+    # a scorului isi pune singura CORROBORATED_SIGNALS mai sus; aici ajunge tot
+    # ce e prea slab ca sa concluzioneze. Conditia veche punea marcajul doar cand
+    # lista era complet goala, deci un mesaj cu un semnal slab (dar nedecisiv)
+    # iesea escaladat fara niciun motiv consemnat - exact ce interzice principiul
+    # "verdictul e o functie de dovezi".
+    evidence.append(
+        Evidence(
+            code="INSUFFICIENT_EVIDENCE",
+            severity=Severity.MEDIUM,
+            description="E-mailul nu conține suficiente semnale clare și necesită analiză manuală.",
         )
+    )
     return Analysis(verdict=Verdict.NEEDS_REVIEW, confidence=0.5, evidence=evidence)
 
 

@@ -8,6 +8,8 @@ dublica si nu reproceseaza".
 
 from __future__ import annotations
 
+import sys
+
 from pathlib import Path
 from typing import Any
 
@@ -369,8 +371,10 @@ def test_ingestia_din_imap_salveaza_eml_ul_brut_si_raportul(
     salvate = sorted(p.name for p in (tmp_path / "brute").iterdir())
     assert len(salvate) == 2
     assert all(name.endswith(".eml") for name in salvate)
-    # Sectiunea 4.5: .eml-urile brute stau la 600.
-    assert all(p.stat().st_mode & 0o777 == 0o600 for p in (tmp_path / "brute").iterdir())
+    # Sectiunea 4.5: .eml-urile brute stau la 600. Doar pe POSIX - pe Windows
+    # chmod comuta doar read-only, deci restul testului ramane valid si acolo.
+    if sys.platform != "win32":
+        assert all(p.stat().st_mode & 0o777 == 0o600 for p in (tmp_path / "brute").iterdir())
 
 
 def test_al_doilea_poll_nu_reproceseaza(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

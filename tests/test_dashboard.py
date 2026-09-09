@@ -7,12 +7,21 @@ ce filtra, si statusul care disparea la refresh.
 
 from __future__ import annotations
 
+import pytest
+from typing import Any
+
 from fastapi.testclient import TestClient
 
 from triage import db
 from triage.dashboard.app import app
 from triage.db import session
 from triage.pipeline import ingest_bytes
+
+# Testele de aici pornesc o bucla de evenimente prin TestClient. Pe Windows,
+# self-pipe-ul ei e o pereche de socketi AF_INET pe loopback, pe care
+# pytest-socket ii blocheaza. Marcajul deschide STRICT loopback-ul, si doar
+# pentru acest modul - vezi conftest.py.
+pytestmark = pytest.mark.needs_loopback
 
 client = TestClient(app)
 
@@ -270,3 +279,113 @@ def test_ingestia_din_dashboard_e_idempotenta(tmp_path: object) -> None:
     client.post("/ingest")
     with session() as s:
         assert len(db.list_reports(s)) == first
+
+
+# ---------------------------------------------------------------------------
+# Incarcarea prin drag & drop
+# ---------------------------------------------------------------------------
+
+
+def _upload(name: str, raw: bytes) -> Any:
+    return client.post("/upload", files={"files": (name, raw, "message/rfc822")})
+
+
+def test_incarcarea_analizeaza_si_salveaza() -> None:
+    """Fisierul aruncat in pagina intra pe aceeasi conducta ca restul."""
+    response = _upload("phish.eml", PHISHING)
+
+    assert response.status_code == 200
+    assert "Periculos" in response.text
+
+    # Nu doar afisat: chiar salvat, deci apare si in coada.
+    assert "phish.eml" in client.get("/").text or client.get("/").status_code == 200
+    with session() as s:
+        assert len(db.list_reports(s)) == 1
+
+
+def test_incarcarea_aceluiasi_fisier_nu_dubleaza() -> None:
+    """Idempotenta pe sha256 - aceeasi regula ca la ingestia normala."""
+    _upload("phish.eml", PHISHING)
+    response = _upload("alt-nume.eml", PHISHING)
+
+    assert response.status_code == 200
+    assert "deja analizat" in response.text
+    with session() as s:
+        assert len(db.list_reports(s)) == 1
+
+
+def test_incarcarea_unui_msg_explica_ce_are_de_facut() -> None:
+    """.msg e OLE, nu RFC822. Conversia e unealta separata, nu dependinta de runtime."""
+    response = _upload("raportare.msg", b"\xd0\xcf\x11\xe0oleole")
+
+    assert response.status_code == 200
+    assert "msg_to_eml.py" in response.text
+    with session() as s:
+        assert db.list_reports(s) == []
+
+
+def test_fisierul_gol_nu_creeaza_raport() -> None:
+    response = _upload("gol.eml", b"")
+
+    assert response.status_code == 200
+    assert "gol" in response.text.lower()
+    with session() as s:
+        assert db.list_reports(s) == []
+
+
+def test_fisierul_prea_mare_e_respins() -> None:
+    from triage.dashboard.app import MAX_UPLOAD_BYTES
+
+    response = _upload("urias.eml", b"x" * (MAX_UPLOAD_BYTES + 1))
+
+    assert response.status_code == 200
+    assert "Limita" in response.text
+    with session() as s:
+        assert db.list_reports(s) == []
+
+
+def test_mailul_malformat_nu_doboara_pagina() -> None:
+    """Sectiunea 8.3: niciun mesaj malformat nu opreste pipeline-ul."""
+    response = _upload("stricat.eml", b"\xff\xfe not an email at all \x00\x01")
+
+    assert response.status_code == 200
+
+
+def test_incarcarea_nu_randeaza_html_din_mail() -> None:
+    """Sectiunea 4.3, si pe calea noua: HTML-ul atacatorului ramane text."""
+    ostil = (
+        b"From: Atacator <rau@evil-domain.example>\n"
+        b"To: itsec@exemplu.ro\n"
+        b"Subject: <script>alert(1)</script>\n"
+        b"Authentication-Results: mx.exemplu.ro; spf=fail\n"
+        b"\n"
+        b"<script>alert('xss')</script> Confirmati aici: https://rau.example/login\n"
+    )
+    response = _upload("ostil.eml", ostil)
+
+    assert response.status_code == 200
+    assert "<script>alert" not in response.text
+    assert "&lt;script&gt;" in response.text
+
+
+def test_incarcarea_defangheaza_url_urile() -> None:
+    response = _upload("phish.eml", PHISHING)
+
+    assert "https://rau.example/login" not in response.text
+    assert "hxxps" in response.text
+
+
+def test_mai_multe_fisiere_odata() -> None:
+    response = client.post(
+        "/upload",
+        files=[
+            ("files", ("a.eml", PHISHING, "message/rfc822")),
+            ("files", ("b.eml", SIMULARE, "message/rfc822")),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert "Periculos" in response.text
+    assert "Simulare" in response.text
+    with session() as s:
+        assert len(db.list_reports(s)) == 2

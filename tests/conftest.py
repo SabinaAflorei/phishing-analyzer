@@ -7,6 +7,7 @@ Testele care au voie sa vorbeasca cu Ollama pe loopback folosesc marker-ul
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,11 +18,29 @@ from triage import db
 CORPUS = Path(__file__).parent.parent / "corpus" / "eml"
 
 
+_LOOPBACK = ["127.0.0.1", "localhost", "::1"]
+
+
 @pytest.fixture(autouse=True)
 def _allow_ollama_only_when_marked(request: pytest.FixtureRequest) -> None:
     if request.node.get_closest_marker("needs_ollama"):
         enable_socket()
-        socket_allow_hosts(["127.0.0.1", "localhost", "::1"], allow_unix_socket=True)
+        socket_allow_hosts(_LOOPBACK, allow_unix_socket=True)
+        return
+
+    if sys.platform == "win32" and request.node.get_closest_marker("needs_loopback"):
+        # `--allow-unix-socket` din addopts acopera doar POSIX, unde bucla de
+        # evenimente asyncio isi face self-pipe-ul cu socketpair AF_UNIX. Pe
+        # Windows, ProactorEventLoop foloseste o pereche AF_INET pe loopback,
+        # deci pytest-socket o blocheaza si CADE tot ce porneste o bucla - adica
+        # toate testele de dashboard, desi ele nu ating reteaua.
+        #
+        # Se deschide STRICT loopback-ul: orice host extern ramane blocat, deci
+        # garantia din sectiunea 4.1 (zero request-uri catre infrastructura
+        # atacatorului) e neatinsa - un domeniu raportat nu e niciodata 127.0.0.1.
+        # Vezi tests/test_network_is_blocked.py, care verifica exact asta.
+        enable_socket()
+        socket_allow_hosts(_LOOPBACK, allow_unix_socket=True)
 
 
 @pytest.fixture

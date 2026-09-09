@@ -10,18 +10,23 @@ Toate actiunile POST se termina cu un redirect (303). Fara el, un refresh dupa
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from triage import db
-from triage.db import STATUSES, quality_stats, session, to_dict
-from triage.pipeline import ingest_once
+from triage.db import STATUSES, Report, quality_stats, session, to_dict
+from triage.fetcher import save_raw_eml
+from triage.pipeline import ingest_bytes, ingest_once
+from triage.settings import get_settings
 from triage.verdicts import Verdict
 
 logger = logging.getLogger(__name__)
@@ -48,6 +53,15 @@ MESSAGES = {
 }
 
 VERDICTS = [v.value for v in Verdict]
+
+# Un .eml raportat are zeci-sute de KB. 5 MB lasa loc de atasamente mari fara sa
+# accepte un fisier care ar tine pagina ocupata degeaba.
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+def _report_by_hash(s: Session, eml_sha256: str) -> Report | None:
+    """Raportul deja existent pentru acest fisier, ca sa putem trimite omul la el."""
+    return s.execute(select(Report).where(Report.eml_sha256 == eml_sha256)).scalar_one_or_none()
 
 STATUS_LABELS = {
     "NEW": "Nou",
@@ -180,6 +194,92 @@ async def trigger_ingest() -> RedirectResponse:
     result = ingest_once()
     logger.info("Ingestie din dashboard: %s", result)
     return _redirect("/", "ingested")
+
+
+@app.post("/upload", response_class=HTMLResponse)
+async def upload_reports(request: Request, files: list[UploadFile]) -> HTMLResponse:
+    """Un .eml aruncat in pagina intra pe ACEEASI conducta ca restul.
+
+    Nu exista o cale de analiza "de proba", separata: fisierul trece prin
+    `ingest_bytes`, adica exact parse -> analyze -> draft -> baza de date, cu
+    aceeasi idempotenta pe sha256. Altfel ce vezi aici n-ar dovedi nimic despre
+    ce face sistemul in realitate.
+
+    Intoarce un FRAGMENT de pagina, nu un redirect: dropzone-ul il insereaza pe
+    loc, ca sa vezi verdictul fara sa pierzi coada din ochi.
+    """
+    cfg = get_settings()
+    results: list[dict[str, Any]] = []
+
+    for upload in files:
+        name = Path(upload.filename or "fisier").name
+        raw = await upload.read()
+
+        if not raw:
+            results.append({"name": name, "error": "Fișier gol."})
+            continue
+
+        if len(raw) > MAX_UPLOAD_BYTES:
+            results.append(
+                {
+                    "name": name,
+                    "error": f"Prea mare ({len(raw) // 1024} KB). Limita este "
+                    f"{MAX_UPLOAD_BYTES // 1024 // 1024} MB.",
+                }
+            )
+            continue
+
+        # .msg e format OLE, nu RFC822. Conversia are nevoie de extract-msg, care
+        # e unealta de pregatire a corpusului, nu dependinta de runtime - vezi
+        # requirements-corpus.txt. Spunem exact ce are de facut omul.
+        if name.lower().endswith(".msg"):
+            results.append(
+                {
+                    "name": name,
+                    "error": "Format Outlook .msg. Convertește-l întâi: "
+                    "python3 scripts/msg_to_eml.py "
+                    f"{name} -o corpus/eml/{name[:-4]}.eml",
+                }
+            )
+            continue
+
+        try:
+            digest = hashlib.sha256(raw).hexdigest()
+            destination = cfg.paths.raw_eml_dir / f"{digest}.eml"
+            if not destination.exists():
+                save_raw_eml(raw, destination)
+
+            report = ingest_bytes(
+                raw,
+                source="upload",
+                source_ref=name,
+                raw_eml_path=str(destination),
+                settings=cfg,
+            )
+        except Exception:
+            # Un mesaj malformat nu are voie sa doboare pagina (sectiunea 8.3).
+            logger.exception("Analiza fisierului incarcat a esuat: %s", name)
+            results.append({"name": name, "error": "Fișierul nu a putut fi analizat."})
+            continue
+
+        if report is None:
+            with session() as s:
+                existing = _report_by_hash(s, digest)
+                results.append(
+                    {
+                        "name": name,
+                        "duplicate": True,
+                        "report": to_dict(existing) if existing else None,
+                    }
+                )
+            continue
+
+        with session() as s:
+            fresh = db.get_report(s, report.id)
+            results.append({"name": name, "report": to_dict(fresh) if fresh else None})
+
+    logger.info("Incarcare din dashboard: %d fisiere", len(results))
+    return templates.TemplateResponse(request, "_upload_result.html", {"results": results})
 
 
 @app.get("/stats", response_class=HTMLResponse)

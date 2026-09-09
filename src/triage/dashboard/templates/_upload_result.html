@@ -1,0 +1,63 @@
+{# Fragment inserat de dropzone dupa analiza.
+
+   Aceleasi reguli ca peste tot (sectiunea 4.3): niciun HTML din mail, URL-uri
+   doar defanged si doar ca text, atasamente doar ca metadata. Escaparea Jinja2
+   ramane activa - nimic din ce urmeaza nu foloseste `safe` pe continut din mail.
+#}
+{% for item in results %}
+<article class="drop-result {% if item.error %}drop-result--bad{% endif %}">
+  <header class="drop-result__head">
+    <span class="drop-result__name">{{ item.name }}</span>
+    {% if item.report %}
+    <span class="badge badge--{{ item.report.verdict }}">{{ VERDICT_LABELS[item.report.verdict] }}</span>
+    <span class="drop-result__conf">{{ (item.report.confidence * 100)|round|int }}% încredere</span>
+    {% endif %}
+  </header>
+
+  {% if item.error %}
+  <p class="drop-result__msg">{{ item.error }}</p>
+
+  {% elif item.report is none %}
+  <p class="drop-result__msg">
+    Fișierul era deja în baza de date, dar raportul nu a mai putut fi găsit.
+  </p>
+
+  {% else %}
+  {% if item.duplicate %}
+  <p class="drop-result__msg drop-result__msg--note">
+    Fișierul fusese deja analizat - același conținut, deci același raport.
+    Idempotența ține: nu s-a creat un duplicat.
+  </p>
+  {% endif %}
+
+  <dl class="drop-result__meta">
+    <div><dt>Expeditor</dt><dd>{{ item.report.from_address or "necunoscut" }}</dd></div>
+    <div><dt>Subiect</dt><dd>{{ item.report.subject or "(fără subiect)" }}</dd></div>
+    <div><dt>Raportat de</dt><dd>{{ item.report.reporter or "necunoscut" }}</dd></div>
+    <div><dt>Formă</dt><dd>{{ item.report.report_kind }}</dd></div>
+    <div><dt>Scor</dt><dd>{{ "%.2f"|format(item.report.score) }}</dd></div>
+  </dl>
+
+  {% if item.report.evidence %}
+  <ul class="drop-result__evidence">
+    {% for ev in item.report.evidence %}
+    <li>
+      <code>{{ ev.code }}</code>
+      <span class="sev sev--{{ ev.severity }}">{{ ev.severity }}</span>
+      {{ ev.description }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if item.report.defanged_urls %}
+  <p class="drop-result__label">URL-uri (defanged, niciodată clicabile)</p>
+  <ul class="url-list">
+    {% for url in item.report.defanged_urls %}<li>{{ url }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <a class="btn btn--primary" href="/report/{{ item.report.id }}">Deschide raportul</a>
+  {% endif %}
+</article>
+{% endfor %}

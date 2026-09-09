@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 from pathlib import Path
 
 import imaplib
@@ -187,6 +189,7 @@ def test_hash_ul_mesajului_e_stabil() -> None:
     assert ImapMessage("1", MESAJ).sha256 == ImapMessage("99", MESAJ).sha256
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="permisiuni POSIX")
 def test_save_raw_eml_scrie_cu_permisiuni_restrictive(tmp_path: Path) -> None:
     destination = save_raw_eml(MESAJ, tmp_path / "brute" / "a.eml")
     assert destination.read_bytes() == MESAJ
