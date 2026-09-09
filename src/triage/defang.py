@@ -7,6 +7,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 _IP_RE = re.compile(r"\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b")
 _SCHEME_RE = re.compile(r"\b(http|ftp)(s?)://", re.IGNORECASE)
+_URL_RE = re.compile(r"\b(?:https?|ftps?)://[^\s<>\"\']+", re.IGNORECASE)
 
 SENSITIVE_PARAMS = {
     "token",
@@ -31,6 +32,11 @@ def strip_url_tokens(url: str) -> str:
 
     try:
         parsed = urlparse(url)
+        # Fara schema si host nu e un URL, e text oarecare. Trecerea lui prin
+        # urlencode il stalcea: un subiect de mail stricat, de forma
+        # "=?utf-8?B?...?=", iesea percent-codat pe ecran.
+        if not parsed.scheme or not parsed.netloc:
+            return url
         if not parsed.query:
             return url
 
@@ -61,8 +67,10 @@ def defang(value: str) -> str:
     if not value:
         return ""
 
-    # Curatare token-urile sensibile din URL-uri
-    out = strip_url_tokens(value)
+    # Curatarea de token-uri se aplica pe FIECARE URL din text, nu pe textul
+    # intreg: `value` e de obicei un subiect, un corp de mail sau un header,
+    # nu un URL singur.
+    out = _URL_RE.sub(lambda m: strip_url_tokens(m.group(0)), value)
 
     # Defanging pe scheme (http:// -> hxxp[://])
     out = _SCHEME_RE.sub(lambda m: f"{m.group(1)[0]}xx{m.group(1)[-1]}{m.group(2)}[://]", out)

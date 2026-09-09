@@ -1,29 +1,35 @@
 """Extrage mesajul ORIGINAL, nu wrapper-ul colegului care a raportat."""
 
 from __future__ import annotations
-import hashlib
-import re
-from re import Match
-from dataclasses import dataclass, field
-from email import message_from_bytes
-from enum import StrEnum
-from bs4 import BeautifulSoup
-from email.message import Message
-from email.header import decode_header
+
 import base64
-import urllib.parse
-import quopri
-from contextlib import suppress
+import binascii
 import email.utils
-import struct
+import hashlib
+import io
+import quopri
+import re
+import urllib.parse
+import zipfile
+from contextlib import suppress
+from dataclasses import dataclass, field
+from datetime import datetime
+from email import message_from_bytes
+from email.header import decode_header, make_header
+from email.message import Message
+from enum import StrEnum
+from re import Match
+
+from bs4 import BeautifulSoup, Tag
 
 
 class ReportKind(StrEnum):
+    """CUM a fost raportat mesajul, nu ce este el. Verdictul e treaba analizorului."""
+
     FORWARD_INLINE = "FORWARD_INLINE"
     ATTACHED_EML = "ATTACHED_EML"
     SCREENSHOT_ONLY = "SCREENSHOT_ONLY"  # -> NEEDS_REVIEW
     UNKNOWN = "UNKNOWN"
-    SPAM = "SPAM"
 
 
 @dataclass(slots=True)
@@ -32,98 +38,126 @@ class ParsedAttachment:
     sha256: str
     mime_type: str
     size: int
-    is_encrypted_archive: bool = False
+    encrypted_archive: bool = False
+
 
 @dataclass(slots=True)
 class ParsedLink:
+    """Textul ancorei impreuna cu href-ul. Fara pereche nu poti face semnalul
+    de discrepanta text-link din 6.3."""
+
     text: str
     href: str
 
-_ZIP_LOCAL_HEADER_SIG = b"PK\x03\x04"
-def _zip_is_encrypted(payload: bytes) -> bool:
-    """Citeste doar bitul de criptare din local file header ZIP, fara sa
-    deschida sau sa extraga arhiva - sectiunea 4.1, doar metadate."""
-    if not payload.startswith(_ZIP_LOCAL_HEADER_SIG):
-        return False
-    try:
-        # offset 6-7 in local file header = general purpose bit flag (2 bytes, little-endian)
-        flags = struct.unpack("<H", payload[6:8])[0]
-        return bool(flags & 0x0001)
-    except (struct.error, IndexError):
-        return False
-    
+
 @dataclass(slots=True)
 class ParsedEmail:
     report_kind: ReportKind
     subject: str = ""
+    # Expeditorul MESAJULUI ORIGINAL - la un forward, atacatorul.
     from_address: str = ""
+    from_display_name: str = ""
+    # Colegul care a raportat, adica From-ul mesajului-invelis. Draft-ul de
+    # raspuns i se adreseaza LUI, nu expeditorului original. Cele doua coincid
+    # doar cand mesajul nu e o raportare impachetata.
+    reporter_address: str = ""
+    reporter_display_name: str = ""
+    # Destinatarii mesajului-invelis. Un mesaj catre adresa de raportare e o
+    # raportare, nu un mail suspect trimis de coleg.
+    to_addresses: list[str] = field(default_factory=list)
     reply_to: str = ""
     return_path: str = ""
     message_id: str = ""
     in_reply_to: str = ""
     references: str = ""
     auth_results: str = ""
+    # Data din headerul Date al mesajului-invelis, adica momentul raportarii.
+    sent_at: datetime | None = None
     received_chain: list[str] = field(default_factory=list)
+    # Numele headerelor prezente, cu litere mici. Fingerprint-ul CyberReady se
+    # uita dupa headere proprietare (X-CRPS, X-Virtual-MTA), iar newsletterele
+    # legitime dupa List-Unsubscribe. Doar numele, nu si valorile.
+    header_names: list[str] = field(default_factory=list)
     body_text: str = ""
-    html_extracted_text: str = ""
-    from_extracted_from_body: bool = False
+    # HTML brut, pastrat DOAR pentru extragere de semnale (URL-uri, text ascuns).
+    # Nu se randeaza niciodata in dashboard - sectiunea 4.2.
+    body_html: str = ""
     urls: list[str] = field(default_factory=list)
-    suspicious_links: list[ParsedLink] = field(default_factory=list)
+    links: list[ParsedLink] = field(default_factory=list)
     attachments: list[ParsedAttachment] = field(default_factory=list)
-    raw_html: str = ""   # HTML brut, NICIODATA afisat direct - doar pentru extragere URL-uri si detectie text ascuns 
-    from_display_name: str = ""
-
-_HEADER_LINE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]*:\s")
-
-_URL_LIKE_TEXT_RE = re.compile(r"^(?:https?://)?[\w.-]+\.[a-z]{2,}(?:/\S*)?$", re.IGNORECASE)
-
-def _looks_like_url(text: str) -> bool:
-    return bool(_URL_LIKE_TEXT_RE.match(text.strip()))
+    # True cand From/Subject vin din blocul de headere din CORPUL forward-ului,
+    # nu din headerele mesajului. Atunci received_chain apartine wrapper-ului
+    # (mesajul colegului), nu expeditorului din from_address - analizorul nu are
+    # voie sa compare cele doua intre ele.
+    headers_from_body: bool = False
 
 
-def _hosts_match(link_text: str, href: str) -> bool:
-    text_host = urllib.parse.urlparse(
-        link_text if "://" in link_text else f"//{link_text}"
-    ).netloc.lower() or link_text.lower().split("/")[0]
-    real_host = urllib.parse.urlparse(href).netloc.lower()
-    return text_host == real_host
+URL_RE = re.compile(r"https?://[^\s<>\"'\]\)]+")
+
+# Un header adevarat: nume, doua puncte, spatiu. Un URL nu se potriveste,
+# pentru ca dupa "https" vine "://", nu ": ".
+_HEADER_LINE_RE = re.compile(r"^([A-Za-z][A-Za-z0-9-]*):\s")
+
+# Forma singura nu ajunge: "Atentie: contul dvs..." are exact forma unui header.
+# De aceea se cere si un nume cunoscut. Lista e mica si stabila - sunt headerele
+# care scapa in corp la mailurile malformate si la forward-urile de client.
+_KNOWN_HEADERS = frozenset(
+    """
+    arc-authentication-results arc-message-signature arc-seal authentication-results
+    bcc cc content-disposition content-transfer-encoding content-type date
+    delivered-to dkim-signature from in-reply-to list-id list-unsubscribe
+    message-id mime-version precedence received references reply-to return-path
+    sender subject to
+    de-la trimis catre subiect data
+    """.split()
+)
+
+
+def _is_header_line(line: str) -> bool:
+    match = _HEADER_LINE_RE.match(line)
+    if not match:
+        return False
+    name = match.group(1).lower()
+    return name in _KNOWN_HEADERS or name.startswith("x-")
+
 
 def _clean_body_text(raw_text: str) -> str:
-    """Elimină headerele reziduale scapate în corp din cauza e-mailurilor malformate."""
+    """Elimina headerele reziduale scapate in corp la mailurile malformate.
+
+    Taie DOAR de la inceputul corpului si doar liniile care sunt headere
+    cunoscute (plus continuarile lor pliate). Varianta veche stergea orice linie
+    care contine ":", deci manca URL-urile de pe primul rand si avertismentele
+    de forma "Atentie: ...".
+    """
     lines = raw_text.splitlines()
-    cleaned_lines = []
-    in_headers = True
+    start = 0
+    for i, line in enumerate(lines):
+        if _is_header_line(line):
+            start = i + 1
+        elif start and line[:1] in (" ", "\t") and line.strip():
+            start = i + 1  # continuare de header pliat
+        else:
+            break
 
-    for line in lines:
-        if in_headers:
-            if _HEADER_LINE_RE.match(line):
-                continue
-            if line.strip().startswith("X-") or "Content-Type" in line:
-                continue
-            if not line.strip():
-                in_headers = False
-                continue
-            in_headers = False
+    # randul gol care separa headerele de corp
+    if start and start < len(lines) and not lines[start].strip():
+        start += 1
 
-        cleaned_lines.append(line)
-
-    return "\n".join(cleaned_lines).strip()
+    return "\n".join(lines[start:]).strip()
 
 
 def _decode_part_payload(part: Message) -> str:
-    """Decodează payload-ul unei părți având grijă de Quoted-Printable și Charset."""
+    """Decodeaza payload-ul unei parti, avand grija de Quoted-Printable si charset."""
     payload = part.get_payload(decode=True)
-    if not payload or not isinstance(payload, bytes):
+    if not isinstance(payload, bytes) or not payload:
         return ""
 
-    cte = str(part.get("Content-Transfer-Encoding", "")).lower()
-    if cte == "quoted-printable":
+    if str(part.get("Content-Transfer-Encoding", "")).lower() == "quoted-printable":
         with suppress(Exception):
             payload = quopri.decodestring(payload)
 
     charset = part.get_content_charset() or "utf-8"
-
-    for enc in [charset, "utf-8", "iso-8859-1", "windows-1250"]:
+    for enc in (charset, "utf-8", "iso-8859-1", "windows-1250"):
         try:
             return payload.decode(enc)
         except (UnicodeDecodeError, LookupError):
@@ -132,49 +166,67 @@ def _decode_part_payload(part: Message) -> str:
     return payload.decode("utf-8", errors="replace")
 
 
+def _is_readable(text: str) -> bool:
+    """Rezultatul unei decodari arata a text scris de om?
+
+    Un base64 invalid se decodeaza cu succes in octeti aleatori, care apoi devin
+    mojibake pe ecran. Mai bine lasam encoded-word-ul asa cum a venit: analistul
+    vede ca headerul e stricat, in loc sa citeasca "iǬ���z�^m�".
+    """
+    if not text.strip():
+        return False
+    bad = sum(1 for ch in text if ch == "\ufffd" or (ord(ch) < 32 and ch not in "\t\n\r"))
+    return bad / len(text) < 0.1
+
+
+def _decode_b64(match: Match[str]) -> str:
+    raw = re.sub(r"[^A-Za-z0-9+/=]", "", match.group(1).strip())
+    raw += "=" * (-len(raw) % 4)
+    try:
+        text = base64.b64decode(raw).decode("utf-8")
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        return match.group(0)
+    return text if _is_readable(text) else match.group(0)
+
+
+def _decode_qp(match: Match[str]) -> str:
+    """Un encoded-word de tip Q: "_" inseamna spatiu, "=XX" e un octet in hex.
+
+    Cele doua transformari au sens DOAR aici, in interiorul unui =?utf-8?q?...?=.
+    Aplicate pe text deja decodat stricau subiecte normale: 'Raport_final_2026'
+    devenea 'Raport final 2026', iar 'Reducere 100%20 la produse' pierdea "%20".
+    """
+    qp = match.group(1).replace("_", " ")
+    try:
+        return urllib.parse.unquote(
+            re.sub(r"=([0-9A-Fa-f]{2})", r"%\1", qp), encoding="utf-8", errors="replace"
+        )
+    except (ValueError, UnicodeError):
+        return match.group(0)
+
+
+_EW_B64_RE = re.compile(r"=\?[^?]+\?[bB]\?([^?]*)\?=")
+_EW_QP_RE = re.compile(r"=\?[^?]+\?[qQ]\?([^?]*)\?=")
+
+
 def decode_mime_header(header_value: str | None) -> str:
+    """RFC 2047 pe headere. Biblioteca standard face treaba; noi doar curatam dupa.
+
+    make_header() lipeste corect encoded-word-urile adiacente, inclusiv cand un
+    cuvant a fost taiat in doua. Regex-urile de dupa prind doar ramasitele pe
+    care stdlib nu le-a recunoscut (mailuri malformate, cazul 09).
+    """
     if not header_value:
         return ""
 
     text = str(header_value)
-
     with suppress(Exception):
-        parts = decode_header(text)
-        decoded_chunks = []
-        for fragment, encoding in parts:
-            if isinstance(fragment, bytes):
-                charset = encoding or "utf-8"
-                try:
-                    decoded_chunks.append(fragment.decode(charset, errors="replace"))
-                except (UnicodeDecodeError, LookupError):
-                    decoded_chunks.append(fragment.decode("iso-8859-1", errors="replace"))
-            else:
-                decoded_chunks.append(str(fragment))
-        text = " ".join(decoded_chunks)
+        text = str(make_header(decode_header(text)))
 
-    def decode_b64(match: Match[str]) -> str:
-        b64_str = match.group(1).strip()
-        b64_str = re.sub(r"[^A-Za-z0-9+/=]", "", b64_str)
-        missing_padding = len(b64_str) % 4
-        if missing_padding:
-            b64_str += "=" * (4 - missing_padding)
-        try:
-            return base64.b64decode(b64_str).decode("utf-8", errors="replace")
-        except Exception:
-            return match.group(0)
+    if "=?" in text:
+        text = _EW_B64_RE.sub(_decode_b64, text)
+        text = _EW_QP_RE.sub(_decode_qp, text)
 
-    def decode_qp(match: Match[str]) -> str:
-        qp_str = match.group(1).replace("_", " ")
-        url_encoded = re.sub(r"=([0-9A-Fa-f]{2})", r"%\1", qp_str)
-        try:
-            return urllib.parse.unquote(url_encoded, encoding="utf-8", errors="replace")
-        except Exception:
-            return match.group(0)
-
-    text = re.sub(r"=\?[uU][tT][fF]-8\?[bB]\?([^?]*)\?=", decode_b64, text)
-    text = re.sub(r"=\?[uU][tT][fF]-8\?[qQ]\?([^?]*)\?=", decode_qp, text)
-
-    text = re.sub(r"\s+=\s+", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -188,11 +240,11 @@ _FWD_HEADER_BLOCK_RE = re.compile(
 
 
 def extract_forwarded_headers(body_text: str) -> dict[str, str]:
-    """Extrage blocul de headere inline dintr-un forward. Best-effort.
+    """Extrage blocul de headere inline dintr-un forward.
 
-    Trebuie apelata pe textul BRUT, decodat dar necuratat de
-    _clean_body_text - vezi apelul din parse_report, care foloseste
-    full_raw_body, nu full_body.
+    Best-effort: e text scris de un client de mail, nu structurat ca un Message.
+    Se cheama pe corpul BRUT, inainte de _clean_body_text - altfel curatarea a
+    sters deja exact liniile pe care le cauta regex-ul.
     """
     match = _FWD_HEADER_BLOCK_RE.search(body_text)
     if not match:
@@ -203,10 +255,24 @@ def extract_forwarded_headers(body_text: str) -> dict[str, str]:
     }
 
 
+def _archive_is_encrypted(payload: bytes) -> bool:
+    """Bitul 0 din general purpose flag al headerului ZIP = continut criptat.
+
+    Se citeste doar directorul central al arhivei. Arhiva NU se deschide, nu se
+    extrage si nu se incearca nicio parola (sectiunea 4.1).
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as zf:
+            return any(info.flag_bits & 0x1 for info in zf.infolist())
+    except (zipfile.BadZipFile, OSError, ValueError):
+        return False
+
+
 def detect_report_kind(raw: bytes) -> ReportKind:
     msg = message_from_bytes(raw)
     has_image = False
     has_text = False
+
     for part in msg.walk():
         content_type = part.get_content_type()
         filename = part.get_filename() or ""
@@ -218,58 +284,69 @@ def detect_report_kind(raw: bytes) -> ReportKind:
             body = part.get_payload(decode=True)
             if isinstance(body, bytes) and body.strip():
                 has_text = True
+
     if has_image and not has_text:
         return ReportKind.SCREENSHOT_ONLY
-    raw_subject = msg.get("Subject", "")
-    subject = decode_mime_header(raw_subject)
-    if "fwd:" in subject.lower() or "fw:" in subject.lower():
+
+    subject = decode_mime_header(msg.get("Subject", "")).lower()
+    if "fwd:" in subject or "fw:" in subject:
         return ReportKind.FORWARD_INLINE
     return ReportKind.UNKNOWN
-    
+
+
+def _inner_message(msg: Message) -> Message:
+    """Mesajul .eml atasat, daca exista. Altfel mesajul primit."""
+    for part in msg.walk():
+        filename = (part.get_filename() or "").lower()
+        if part.get_content_type() != "message/rfc822" and not filename.endswith(".eml"):
+            continue
+
+        payload = part.get_payload()
+        if isinstance(payload, list) and payload and isinstance(payload[0], Message):
+            return payload[0]
+        if isinstance(payload, Message):
+            return payload
+        raw = part.get_payload(decode=True)
+        if isinstance(raw, bytes) and raw:
+            return message_from_bytes(raw)
+    return msg
+
+
+def _norm_ws(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def parse_report(raw: bytes) -> ParsedEmail:
-    msg = message_from_bytes(raw)
     kind = detect_report_kind(raw)
+    outer = message_from_bytes(raw)
+    msg = _inner_message(outer) if kind == ReportKind.ATTACHED_EML else outer
 
-    if kind == ReportKind.ATTACHED_EML:
-        for part in msg.walk():
-            content_type = part.get_content_type()
-            filename = (part.get_filename() or "").lower()
-            if content_type == "message/rfc822" or filename.endswith(".eml"):
-                payload = part.get_payload()
-                if isinstance(payload, list) and payload:
-                    first_item = payload[0]
-                    if isinstance(first_item, Message):
-                        msg = first_item
-                        break
-                elif isinstance(payload, Message):
-                    msg = payload
-                    break
-                elif isinstance(payload, bytes):
-                    msg = message_from_bytes(payload)
-                    break
+    subject = decode_mime_header(msg.get("Subject", ""))
+    from_header = decode_mime_header(msg.get("From", ""))
+    display_name, from_address = email.utils.parseaddr(from_header)
 
-    raw_subject = msg.get("Subject", "")
-    subject = decode_mime_header(raw_subject)
+    reporter_display, reporter_address = email.utils.parseaddr(
+        decode_mime_header(outer.get("From", ""))
+    )
 
-    from_address = msg.get("From", "")
-    from_display_name, _ = email.utils.parseaddr(from_address)
-    from_display_name = decode_mime_header(from_display_name)
-    reply_to = msg.get("Reply-To", "")
-    return_path = msg.get("Return-Path", "")
-    auth_results = msg.get("Authentication-Results", "")
-    message_id = msg.get("Message-ID", "")
-    in_reply_to = msg.get("In-Reply-To", "")
-    references = msg.get("References", "")
-    received_chain = msg.get_all("Received", [])
+    sent_at: datetime | None = None
+    with suppress(Exception):
+        sent_at = email.utils.parsedate_to_datetime(str(outer.get("Date", "")))
 
-    raw_body_parts = []
-    body_text_parts = []
-    html_text_parts = []
-    raw_html_parts = []
-    suspicious_links = [] 
-    urls = set()
-    attachments = []
-    url_pattern = re.compile(r"https?://[^\s<>\"']+")
+    to_addresses = [
+        addr.lower()
+        for _, addr in email.utils.getaddresses(
+            [decode_mime_header(v) for v in outer.get_all("To", []) + outer.get_all("Cc", [])]
+        )
+        if addr
+    ]
+
+    body_text_parts: list[str] = []
+    html_parts: list[str] = []
+    urls: set[str] = set()
+    links: list[ParsedLink] = []
+    attachments: list[ParsedAttachment] = []
+    raw_text_parts: list[str] = []
 
     for part in msg.walk():
         if part.is_multipart():
@@ -281,91 +358,88 @@ def parse_report(raw: bytes) -> ParsedEmail:
         if "attachment" in disposition or part.get_filename():
             payload = part.get_payload(decode=True)
             if isinstance(payload, bytes):
-                filename = part.get_filename() or "unnamed"
-                sha256 = hashlib.sha256(payload).hexdigest()
-                size = len(payload)
-                is_encrypted=(filename.lower().endswith((".zip", ".docx", ".xlsx", ".pptx")) 
-                              and _zip_is_encrypted(payload)
-                )
+                filename = decode_mime_header(part.get_filename()) or "unnamed"
                 attachments.append(
                     ParsedAttachment(
                         filename=filename,
-                        sha256=sha256,
+                        sha256=hashlib.sha256(payload).hexdigest(),
                         mime_type=content_type,
-                        size=size,
-                        is_encrypted_archive = is_encrypted,
+                        size=len(payload),
+                        encrypted_archive=_archive_is_encrypted(payload),
                     )
                 )
             continue
 
         if content_type == "text/plain":
-            raw_text = _decode_part_payload(part)
-            raw_body_parts.append(raw_text)
-            text = _clean_body_text(raw_text)
-            if text:
-                body_text_parts.append(text)
-                for match in url_pattern.findall(text):
-                    urls.add(match)
+            text = _decode_part_payload(part)
+            raw_text_parts.append(text)
+            urls.update(URL_RE.findall(text))
+            cleaned = _clean_body_text(text)
+            if cleaned:
+                body_text_parts.append(cleaned)
 
         elif content_type == "text/html":
-           html_content = _decode_part_payload(part)
-           raw_html_parts.append(html_content)   # NOU: HTML brut, cu tot cu style=""
+            html = _decode_part_payload(part)
+            if not html:
+                continue
+            html_parts.append(html)
+            soup = BeautifulSoup(html, "html.parser")
 
-           soup = BeautifulSoup(html_content, "html.parser")
-           for element in soup(["script", "style"]):
-               element.decompose()
-           extracted_text = _clean_body_text(soup.get_text(separator="\n"))
-           if extracted_text:
-             html_text_parts.append(extracted_text)
-             if not body_text_parts:
-              body_text_parts.append(extracted_text)
+            for a_tag in soup.find_all("a", href=True):
+                if not isinstance(a_tag, Tag):
+                    continue
+                href = str(a_tag["href"])
+                urls.add(href)
+                links.append(ParsedLink(text=_norm_ws(a_tag.get_text()), href=href))
 
-           for a_tag in soup.find_all("a", href=True):
-             href = a_tag["href"]
-             urls.add(href)
-             link_text = a_tag.get_text(strip=True)
-             if link_text and _looks_like_url(link_text) and not _hosts_match(link_text, href):
-              suspicious_links.append(ParsedLink(text=link_text, href=href))
+            urls.update(URL_RE.findall(html))
 
-           for match in url_pattern.findall(html_content):
-             urls.add(match)
+            # Textul din HTML se aduna MEREU, nu doar cand lipseste text/plain.
+            # Altfel, la un multipart/alternative normal, partea HTML e sarita si
+            # nici textul ascuns, nici cuvintele de marketing nu ajung la analizor.
+            for element in soup(["script", "style"]):
+                element.decompose()
+            html_text = _clean_body_text(soup.get_text(separator="\n"))
+            if html_text and _norm_ws(html_text) not in _norm_ws("\n".join(body_text_parts)):
+                body_text_parts.append(html_text)
+                raw_text_parts.append(html_text)
 
-    full_raw_body = "\n\n".join(raw_body_parts).strip()
     full_body = "\n\n".join(body_text_parts).strip()
-    full_html_text = "\n\n".join(html_text_parts).strip()
-    full_raw_html = "\n".join(raw_html_parts).strip()
-    
 
-    from_extracted_from_body = False
+    # Headerele din corpul forward-ului se extrag din textul BRUT: _clean_body_text
+    # taie exact liniile "From:/Sent:/To:/Subject:" pe care le cauta regex-ul.
+    headers_from_body = False
     if kind == ReportKind.FORWARD_INLINE:
-        fwd_headers = extract_forwarded_headers(full_raw_body)
-        if fwd_headers.get("from"):
-            from_address = fwd_headers["from"]
-            from_display_name, _ = email.utils.parseaddr(from_address)
-            from_display_name = decode_mime_header(from_display_name)
-            from_extracted_from_body = True
-        if fwd_headers.get("subject"):
-            subject = fwd_headers["subject"]
-    
-    
+        fwd = extract_forwarded_headers("\n\n".join(raw_text_parts))
+        if fwd.get("from"):
+            fwd_display, fwd_addr = email.utils.parseaddr(fwd["from"])
+            display_name = fwd_display or display_name
+            from_address = fwd_addr or fwd["from"]
+            headers_from_body = True
+        if fwd.get("subject"):
+            subject = fwd["subject"]
+
     return ParsedEmail(
         report_kind=kind,
         subject=subject,
-        from_address=from_address,
-        reply_to=reply_to,
-        return_path=return_path,
-        auth_results=auth_results,
-        message_id=message_id,
-        in_reply_to=in_reply_to,
-        references=references,
-        received_chain=received_chain,
+        from_address=from_address or from_header,
+        from_display_name=display_name.strip(),
+        reporter_address=reporter_address,
+        reporter_display_name=reporter_display.strip(),
+        to_addresses=to_addresses,
+        reply_to=decode_mime_header(msg.get("Reply-To", "")),
+        return_path=decode_mime_header(msg.get("Return-Path", "")),
+        auth_results=msg.get("Authentication-Results", ""),
+        message_id=msg.get("Message-ID", ""),
+        in_reply_to=msg.get("In-Reply-To", ""),
+        references=msg.get("References", ""),
+        sent_at=sent_at,
+        received_chain=msg.get_all("Received", []),
+        header_names=[str(name).lower() for name in msg],
         body_text=full_body,
-        html_extracted_text=full_html_text,
-        from_extracted_from_body=from_extracted_from_body,
-        urls=list(urls),
+        body_html="\n".join(html_parts),
+        urls=sorted(urls),
+        links=links,
         attachments=attachments,
-        suspicious_links=suspicious_links,
-        raw_html=full_raw_html,
-        from_display_name=from_display_name,
+        headers_from_body=headers_from_body,
     )
-

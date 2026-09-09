@@ -1,65 +1,155 @@
 {% extends "base.html" %}
-
-{% block title %}Coada de Rapoarte Phishing{% endblock %}
+{% block title %}Coadă de lucru · Triaj phishing{% endblock %}
 
 {% block content %}
-<div class="card">
-    <h2 style="margin-bottom: 1rem;">Coadă de Lucru</h2>
+<div class="page-head">
+  <div>
+    <h1>Coadă de lucru</h1>
+    <p>{{ counts.total_reports }} raportări în total, {{ counts.by_status.NEW }} încă neatinse.</p>
+  </div>
+  <form method="post" action="/ingest">
+    <button type="submit" class="btn">Caută raportări noi</button>
+  </form>
+</div>
 
-    <form id="bulk-form" method="post" action="/bulk-action">
-        <div style="margin-bottom: 1rem; background: #f1f5f9; padding: 0.75rem 1rem; border-radius: 6px; display: flex; gap: 12px; align-items: center;">
-            <strong style="font-size: 0.9rem;">Acțiuni Bulk:</strong>
-            <select name="bulk_status" style="padding: 6px 10px; border: 1px solid #cbd5e0;">
-                <option value="NEW">Marchează ca NOU (NEW)</option>
-                <option value="SENT">Marchează ca TRIMIS (SENT)</option>
-                <option value="ESCALATED">Marchează ca ESCALAT (ESCALATED)</option>
-            </select>
-            <button type="submit" style="background-color: var(--primary); color: white; padding: 6px 16px;">
-                Aplică
-            </button>
-        </div>
+<div class="panel">
 
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 30px;"><input type="checkbox" id="select-all" onclick="toggleAll(this)"></th>
-                    <th>ID</th>
-                    <th>Subiect</th>
-                    <th>Raportor</th>
-                    <th>Verdict</th>
-                    <th>Încredere</th>
-                    <th>Status</th>
-                    <th>Acțiune</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for report in reports %}
-                <tr>
-                    <td><input type="checkbox" name="selected_ids" value="{{ report.id }}" class="report-checkbox"></td>
-                    <td><code>{{ report.id }}</code></td>
-                    <td><a href="/report/{{ report.id }}" style="text-decoration: none; font-weight: 600; color: #2d3748;">{{ report.subject | decode_mime }}</a></td>
-                    <td>{{ report.reporter }}</td>
-                    <td><span class="badge {{ report.verdict }}">{{ report.verdict }}</span></td>
-                    <td>{{ report.confidence }}</td>
-                    <td><span style="font-size: 0.85rem; font-weight: 600; color: #4a5568;">{{ report.status }}</span></td>
-                    <td><a href="/report/{{ report.id }}" style="text-decoration: none; background: #edf2f7; color: #2d3748; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem;">Deschide</a></td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="8" style="text-align: center; color: #718096; padding: 2rem;">Nu există rapoarte în coadă.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+  <!-- Filtrele NAVIGHEAZA. Actiunea in masa MODIFICA. Doua lucruri diferite,
+       deci doua bare diferite - pana acum aratau la fel si stateau lipite. -->
+  <div class="filters">
+    <div class="filters__group" role="group" aria-label="Filtrează după status">
+      <a class="chip" href="/" aria-current="{{ 'true' if not active_status and not active_verdict else 'false' }}">
+        Toate <span class="chip__count">{{ counts.total_reports }}</span>
+      </a>
+      {% for status in STATUSES %}
+      <a class="chip" href="/?status={{ status }}{% if active_verdict %}&verdict={{ active_verdict }}{% endif %}"
+         aria-current="{{ 'true' if active_status == status else 'false' }}">
+        {{ STATUS_LABELS[status] }} <span class="chip__count">{{ counts.by_status[status] }}</span>
+      </a>
+      {% endfor %}
+    </div>
+
+    <div class="filters__right">
+      <label for="verdict-filter">Verdict</label>
+      <select id="verdict-filter" onchange="location.href = this.value">
+        <option value="/{% if active_status %}?status={{ active_status }}{% endif %}">toate</option>
+        {% for verdict in VERDICTS %}
+        <option value="/?verdict={{ verdict }}{% if active_status %}&status={{ active_status }}{% endif %}"
+                {% if active_verdict == verdict %}selected{% endif %}>
+          {{ VERDICT_LABELS[verdict] }} ({{ counts.verdict_distribution.get(verdict, 0) }})
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <form id="bulk-form" method="post" action="/bulk-action">
+  <div class="bulkbar">
+    <span class="bulkbar__label" id="bulk-count">Bifează rapoarte ca să le schimbi starea împreună</span>
+    <label for="bulk_status" class="visually-hidden">Stare de aplicat</label>
+    <select name="bulk_status" id="bulk_status" disabled>
+      {% for status in STATUSES %}
+      <option value="{{ status }}">Marchează ca „{{ STATUS_LABELS[status] }}”</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn" id="bulk-apply" disabled>Aplică</button>
+  </div>
+
+  {% if reports %}
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th class="cell-narrow"><input type="checkbox" id="select-all" aria-label="Selectează tot"></th>
+          <th>Subiect</th>
+          <th>Raportor</th>
+          <th>Verdict</th>
+          <th class="cell-narrow">Încredere</th>
+          <th class="cell-narrow">Status</th>
+          <th class="cell-narrow">Primit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for report in reports %}
+        <tr>
+          <td class="cell-narrow">
+            <input type="checkbox" name="selected_ids" value="{{ report.id }}" class="report-checkbox"
+                   aria-label="Selectează raportul {{ report.id }}">
+          </td>
+          <td>
+            <a class="cell-subject" href="/report/{{ report.id }}">{{ report.subject }}</a>
+            <span class="cell-sub">{{ report.from_address }}</span>
+          </td>
+          <td>{{ report.reporter }}</td>
+          <td>
+            <span class="badge badge--{{ report.verdict }}">{{ VERDICT_LABELS[report.verdict] }}</span>
+            {% if report.was_corrected %}
+            <span class="corrected">corectat din {{ VERDICT_LABELS[report.auto_verdict] }}</span>
+            {% endif %}
+          </td>
+          <td class="cell-narrow numeric">
+            {% set conf = report.confidence or 0 %}
+            <span class="confidence">
+              <span class="confidence__track">
+                <span class="confidence__fill confidence__fill--{{ 'high' if conf >= 0.85 else ('medium' if conf >= 0.6 else 'low') }}"
+                      style="width: {{ (conf * 100) | round | int }}%"></span>
+              </span>
+              <span class="confidence__value">{{ '%.2f'|format(conf) }}</span>
+            </span>
+          </td>
+          <td class="cell-narrow">
+            <span class="status status--{{ report.status }}">{{ STATUS_LABELS[report.status] }}</span>
+          </td>
+          <td class="cell-narrow numeric">{{ report.received_at[:10] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% elif active_status or active_verdict %}
+  <div class="empty">
+    <h3>Niciun raport pe filtrul acesta</h3>
+    <p>Filtrul curent nu potrivește nimic din coadă. Scoate-l ca să vezi tot.</p>
+    <p><a href="/">Arată toate raportările</a></p>
+  </div>
+
+  {% else %}
+  <div class="empty">
+    <h3>Coada este goală</h3>
+    <p>
+      Nu s-a ingerat încă nicio raportare. Sursa configurată citește fie corpusul
+      offline din <code>corpus/eml/</code>, fie mailbox-ul IMAP, în funcție de
+      <code>config/settings.yaml</code>.
+    </p>
+    <form method="post" action="/ingest">
+      <button type="submit" class="btn btn--primary">Rulează prima ingestie</button>
     </form>
+  </div>
+  {% endif %}
+
+  </form>
 </div>
 
 <script>
-function toggleAll(source) {
-    checkboxes = document.getElementsByClassName('report-checkbox');
-    for(var i=0, n=checkboxes.length;i<n;i++) {
-        checkboxes[i].checked = source.checked;
-    }
-}
+  const boxes = [...document.querySelectorAll(".report-checkbox")];
+  const applyBtn = document.getElementById("bulk-apply");
+  const statusSelect = document.getElementById("bulk_status");
+  const countLabel = document.getElementById("bulk-count");
+
+  function refreshBulkBar() {
+    const selected = boxes.filter((box) => box.checked).length;
+    applyBtn.disabled = statusSelect.disabled = selected === 0;
+    countLabel.textContent = selected
+      ? `${selected} ${selected === 1 ? "raport selectat" : "rapoarte selectate"}`
+      : "Bifează rapoarte ca să le schimbi starea împreună";
+  }
+
+  document.getElementById("select-all")?.addEventListener("change", (event) => {
+    for (const box of boxes) box.checked = event.target.checked;
+    refreshBulkBar();
+  });
+  for (const box of boxes) box.addEventListener("change", refreshBulkBar);
+  refreshBulkBar();
 </script>
 {% endblock %}

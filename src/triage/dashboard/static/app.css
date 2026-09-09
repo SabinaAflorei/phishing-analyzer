@@ -1,0 +1,751 @@
+/* Triaj phishing - foaia de stil a dashboard-ului.
+ *
+ * Un singur fisier, servit local. Nicio resursa externa: nici fonturi, nici CSS
+ * de pe internet. Masina care ruleaza sistemul nu are voie sa iasa in retea
+ * (sectiunea 4.1), iar un @import catre Google Fonts ar fi exact asta.
+ *
+ * Scena de folosire: un analist, la birou, in timpul programului, care trece
+ * printr-o coada de raportari. De aici vin toate deciziile - tema deschisa,
+ * densitate mare, culoare doar acolo unde inseamna ceva.
+ */
+
+:root {
+  /* Suprafete si contur */
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;   /* bare de unelte, capete de tabel */
+  --surface-3: #e9edf2;
+  --line: #e2e6ec;
+  --line-strong: #cdd5df;
+
+  /* Cerneala */
+  --text: #16202b;
+  --text-2: #586374;
+  --text-3: #667081;
+
+  /* Accent: actiunea principala, selectia curenta, starile. Niciodata decor. */
+  --accent: #1d4ed8;
+  --accent-hover: #1a43b8;
+  --accent-soft: #eef3ff;
+  --accent-line: #c5d7fd;
+
+  --danger: #b3261e;
+  --danger-hover: #97201a;
+  --danger-soft: #fdeae8;
+
+  /* Verdicte: vocabular semantic rezervat. Fiecare pereche e verificata la
+   * contrast >= 4.5:1, si apare INTOTDEAUNA impreuna cu cuvantul verdictului -
+   * culoarea singura nu are voie sa fie purtatorul informatiei. */
+  --v-simulation-bg: #e7f4ea;  --v-simulation-fg: #146c2e;
+  --v-malicious-bg: #fdeae8;   --v-malicious-fg: #b3261e;
+  --v-spam-bg: #fdf3dd;        --v-spam-fg: #845000;
+  --v-legitimate-bg: #e8f0fe;  --v-legitimate-fg: #1a56c4;
+  --v-review-bg: #eceff3;      --v-review-fg: #49525f;
+
+  /* Severitatea dovezilor */
+  --sev-critical: #b3261e;
+  --sev-high: #c2610a;
+  --sev-medium: #8a6100;
+  --sev-low: #4d7c2f;
+  --sev-info: #667081;
+
+  /* Scara de spatiu, pas de 4px */
+  --s1: 0.25rem; --s2: 0.5rem;  --s3: 0.75rem; --s4: 1rem;
+  --s5: 1.5rem;  --s6: 2rem;    --s7: 3rem;
+
+  /* Tipografie: o singura familie de sistem, scara fixa cu raport ~1.15.
+   * Nimic fluid: utilizatorul sta la acelasi ecran toata ziua. */
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+          Arial, "Noto Sans", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+          "Liberation Mono", monospace;
+  --fs-xs: 0.6875rem; --fs-sm: 0.8125rem; --fs-base: 0.875rem;
+  --fs-md: 1rem;      --fs-lg: 1.125rem;  --fs-xl: 1.375rem; --fs-2xl: 1.625rem;
+
+  --radius: 6px;
+  --radius-lg: 10px;
+  --shadow: 0 1px 2px rgba(22, 32, 43, 0.05), 0 4px 12px rgba(22, 32, 43, 0.05);
+  --shadow-raised: 0 2px 4px rgba(22, 32, 43, 0.06), 0 10px 24px rgba(22, 32, 43, 0.08);
+  --speed: 150ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.011em; }
+h1 { font-size: var(--fs-xl); }
+h2 { font-size: var(--fs-lg); }
+h3 { font-size: var(--fs-md); }
+h4 { font-size: var(--fs-base); }
+p { margin: 0 0 var(--s3); }
+p:last-child { margin-bottom: 0; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.numeric { font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------- Structura */
+
+.shell { max-width: 1360px; margin: 0 auto; padding: 0 var(--s5) var(--s7); }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar__inner {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: var(--s3) var(--s5);
+  display: flex;
+  align-items: center;
+  gap: var(--s5);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  font-weight: 650;
+  font-size: var(--fs-md);
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+.brand span { font-weight: 400; font-size: var(--fs-sm); color: var(--text-3); }
+
+.topnav { display: flex; gap: var(--s1); margin-left: auto; }
+
+.topnav a {
+  padding: var(--s2) var(--s3);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-weight: 550;
+  transition: background var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+.topnav a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.topnav a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s6) 0 var(--s4);
+  flex-wrap: wrap;
+}
+.page-head p { color: var(--text-2); margin: var(--s1) 0 0; }
+
+/* ------------------------------------------------------------------- Panouri */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+.panel + .panel { margin-top: var(--s4); }
+.panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5);
+  border-bottom: 1px solid var(--line);
+}
+.panel__body { padding: var(--s5); }
+.panel__body--flush { padding: 0; }
+
+.hint { color: var(--text-3); font-size: var(--fs-sm); }
+
+/* ------------------------------------------------------------------- Butoane */
+
+.btn {
+  --btn-bg: var(--surface);
+  --btn-fg: var(--text);
+  --btn-line: var(--line-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: 0.4375rem var(--s3);
+  border: 1px solid var(--btn-line);
+  border-radius: var(--radius);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease),
+              box-shadow var(--speed) var(--ease);
+}
+.btn:hover { background: var(--surface-2); }
+.btn:active { background: var(--surface-3); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn--primary {
+  --btn-bg: var(--accent);
+  --btn-fg: #fff;
+  --btn-line: var(--accent);
+}
+.btn--primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn--primary:active { background: var(--accent-hover); }
+
+.btn--danger {
+  --btn-bg: var(--surface);
+  --btn-fg: var(--danger);
+  --btn-line: #edc4c0;
+}
+.btn--danger:hover { background: var(--danger-soft); }
+
+.btn--wide { width: 100%; }
+
+/* -------------------------------------------------------------------- Filtre */
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  padding: var(--s3) var(--s5);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.filters__group { display: flex; gap: var(--s1); flex-wrap: wrap; }
+.filters__right { display: flex; align-items: center; gap: var(--s2); margin-left: auto; }
+
+/* Bara de actiuni in masa: modifica date, deci nu are voie sa arate ca filtrele.
+ * Sta dezactivata pana bifezi ceva - o comanda care nu poate face nimic acum nu
+ * trebuie sa para apasabila. */
+.bulkbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s5);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.bulkbar__label { font-size: var(--fs-sm); color: var(--text-3); margin-right: auto; }
+.bulkbar select:disabled { background: var(--surface-2); color: var(--text-3); cursor: not-allowed; }
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s2);
+  padding: 0.3125rem var(--s3);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  transition: background var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+.chip:hover { background: var(--surface-3); color: var(--text); text-decoration: none; }
+.chip[aria-current="true"] {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.chip__count {
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.chip[aria-current="true"] .chip__count { color: var(--accent); }
+
+select, textarea, input[type="text"] {
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 0.4375rem var(--s2);
+  transition: border-color var(--speed) var(--ease), box-shadow var(--speed) var(--ease);
+}
+select:hover, textarea:hover { border-color: var(--text-3); }
+textarea:focus, select:focus { border-color: var(--accent); }
+
+label { font-size: var(--fs-sm); font-weight: 550; color: var(--text-2); }
+
+/* -------------------------------------------------------------------- Tabele */
+
+.table-scroll { overflow-x: auto; }
+
+table { width: 100%; border-collapse: collapse; }
+
+th, td {
+  padding: var(--s3) var(--s4);
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  border-bottom-color: var(--line-strong);
+}
+tbody tr { transition: background var(--speed) var(--ease); }
+tbody tr:hover { background: var(--accent-soft); }
+tbody tr:last-child td { border-bottom: none; }
+
+.cell-subject {
+  font-weight: 550;
+  color: var(--text);
+  display: block;
+  max-width: 46ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cell-subject:hover { color: var(--accent); }
+.cell-sub { display: block; font-size: var(--fs-xs); color: var(--text-3); }
+.cell-narrow { width: 1%; white-space: nowrap; }
+
+/* ------------------------------------------------------------------- Verdicte */
+
+.badge {
+  display: inline-block;
+  padding: 0.1875rem var(--s2);
+  border-radius: var(--radius);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.badge--SIMULATION   { background: var(--v-simulation-bg); color: var(--v-simulation-fg); }
+.badge--MALICIOUS    { background: var(--v-malicious-bg);  color: var(--v-malicious-fg); }
+.badge--SPAM         { background: var(--v-spam-bg);       color: var(--v-spam-fg); }
+.badge--LEGITIMATE   { background: var(--v-legitimate-bg); color: var(--v-legitimate-fg); }
+.badge--NEEDS_REVIEW { background: var(--v-review-bg);     color: var(--v-review-fg); }
+
+.badge--lg { font-size: var(--fs-sm); padding: var(--s1) var(--s3); }
+
+.status {
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+.status::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.status--NEW::before { background: var(--accent); }
+.status--IN_PROGRESS::before { background: var(--sev-medium); }
+.status--SENT::before { background: var(--sev-low); }
+.status--ESCALATED::before { background: var(--danger); }
+
+.corrected {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  display: block;
+  margin-top: 2px;
+}
+
+/* -------------------------------------------------------------------- Dovezi */
+
+.evidence { list-style: none; margin: 0; padding: 0; }
+.evidence li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.evidence li:last-child { border-bottom: none; }
+.evidence li:first-child { padding-top: 0; }
+
+.sev {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-top: 0.4375rem;
+  background: var(--sev-info);
+}
+.sev--CRITICAL { background: var(--sev-critical); }
+.sev--HIGH { background: var(--sev-high); }
+.sev--MEDIUM { background: var(--sev-medium); }
+.sev--LOW { background: var(--sev-low); }
+.sev--INFO { background: var(--sev-info); }
+
+.evidence__code {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+  display: block;
+  margin-bottom: 2px;
+}
+.evidence__detail {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  display: block;
+  margin-top: var(--s1);
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------ Detaliu: doua coloane */
+
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 22.5rem; gap: var(--s4); align-items: start; }
+.split__aside { position: sticky; top: 4.25rem; }
+
+.kv { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--s2) var(--s4); margin: 0; }
+.kv dt { color: var(--text-3); font-size: var(--fs-sm); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+
+code, .mono {
+  font-family: var(--mono);
+  font-size: 0.8125em;
+  background: var(--surface-2);
+  padding: 0.125rem 0.3125rem;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+
+.body-text {
+  margin: 0;
+  padding: var(--s4);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 32rem;
+  overflow-y: auto;
+}
+
+.url-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+.url-list li {
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  padding: var(--s2) var(--s3);
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  overflow-wrap: anywhere;
+}
+
+.file {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s3);
+  align-items: start;
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.file + .file { margin-top: var(--s2); }
+.file__meta { font-size: var(--fs-xs); color: var(--text-3); display: block; margin-top: 2px; }
+.file__warn { color: var(--danger); font-weight: 550; }
+
+.field { display: block; margin-bottom: var(--s4); }
+.field:last-child { margin-bottom: 0; }
+.field > label { display: block; margin-bottom: var(--s2); }
+.field select, .field textarea { width: 100%; }
+.field textarea { min-height: 15rem; resize: vertical; line-height: 1.6; }
+
+.divider { border: 0; border-top: 1px solid var(--line); margin: var(--s4) 0; }
+
+.button-row { display: flex; gap: var(--s2); }
+.button-row > * { flex: 1; }
+
+/* -------------------------------------------------------------------- Mesaje */
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  margin-bottom: var(--s4);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: 550;
+}
+
+.empty {
+  padding: var(--s7) var(--s5);
+  text-align: center;
+  color: var(--text-2);
+}
+.empty h3 { margin-bottom: var(--s2); }
+.empty p { max-width: 46ch; margin-inline: auto; }
+.empty form { margin-top: var(--s4); }
+
+/* ---------------------------------------------------------------- Statistici */
+
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: var(--s4); }
+
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--s4) var(--s5);
+  box-shadow: var(--shadow);
+}
+.stat__label { font-size: var(--fs-sm); color: var(--text-2); }
+.stat__value {
+  font-size: var(--fs-2xl);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin: var(--s1) 0 0;
+}
+.stat__note { font-size: var(--fs-xs); color: var(--text-3); }
+.stat--target .stat__value { color: var(--sev-low); }
+.stat--miss .stat__value { color: var(--sev-high); }
+
+/* Distributia de verdicte.
+ * Barele poarta MARIMEA, intr-o singura culoare. Identitatea o poarta eticheta
+ * de verdict de langa ele, care contine si cuvantul - deci nu depinde de
+ * culoare. Cinci nuante de status nu pot fi separate sigur pentru daltonisti,
+ * si nici nu trebuie sa fie: nu culoarea e ce compari aici. */
+.dist { display: grid; gap: var(--s3); }
+.dist__row { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr) 3.5rem; gap: var(--s3); align-items: center; }
+.dist__track { background: var(--surface-2); border-radius: 4px; height: 1.25rem; overflow: hidden; }
+.dist__bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 0 4px 4px 0;
+  min-width: 2px;
+}
+.dist__value { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.dist__share { font-size: var(--fs-xs); color: var(--text-3); font-weight: 400; }
+
+.matrix td, .matrix th { font-size: var(--fs-sm); }
+.matrix .arrow { color: var(--text-3); padding: 0 var(--s2); }
+
+/* ------------------------------------------------------------------ Utilitare */
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* --------------------------------------------------------------- Responsivitate
+ * Structurala, nu tipografica: coloanele se stivuiesc, tabelul devine derulabil
+ * pe orizontala in propriul container. Corpul paginii nu se misca niciodata. */
+
+@media (max-width: 62rem) {
+  .split { grid-template-columns: minmax(0, 1fr); }
+  .split__aside { position: static; }
+}
+
+@media (max-width: 40rem) {
+  .shell { padding-inline: var(--s4); }
+  .topbar__inner { padding-inline: var(--s4); gap: var(--s3); }
+  .page-head { padding-top: var(--s5); }
+  .kv { grid-template-columns: minmax(0, 1fr); gap: var(--s1); }
+  .kv dt { margin-top: var(--s2); }
+  .dist__row { grid-template-columns: 7rem minmax(0, 1fr) 3rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  .topbar, .filters, .split__aside, .btn { display: none; }
+  .panel { box-shadow: none; break-inside: avoid; }
+}
+
+/* --------------------------------------------------------------------------
+ * Tema intunecata
+ *
+ * Doar token-uri. Nicio regula de layout nu se repeta aici, pentru ca restul
+ * fisierului nu contine culori scrise de mana - se uita toate la variabilele
+ * din :root. De asta tema incape in doua blocuri.
+ *
+ * Trei stari, in ordinea asta:
+ *   :root                       lumina, mai sus in fisier
+ *   prefers-color-scheme: dark  ce vrea sistemul, cand omul n-a ales explicit
+ *   [data-theme=...]            alegerea din buton, bate sistemul in ambele sensuri
+ *
+ * Lista de token-uri e scrisa de doua ori intentionat. Alternativa, light-dark(),
+ * ar fi tinut-o intr-un singur loc, dar pe un browser care n-o cunoaste pica
+ * TOATE culorile deodata, nu doar tema. Asa, un browser vechi ramane pe lumina
+ * si dashboard-ul arata normal.
+ *
+ * Perechile de verdict raman peste 4.5:1, verificate una cate una. Ca si la
+ * lumina, culoarea nu e singurul purtator de informatie - cuvantul verdictului
+ * sta intotdeauna langa ea.
+ * ------------------------------------------------------------------------ */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #0f1419;
+    --surface: #171e27;
+    --surface-2: #1e2632;
+    --surface-3: #263040;
+    --line: #2d3748;
+    --line-strong: #3d4a5c;
+
+    --text: #e6edf5;
+    --text-2: #a9b4c4;
+    --text-3: #8b95a5;
+
+    --accent: #6d8dff;
+    --accent-hover: #8aa4ff;
+    --accent-soft: #1a2440;
+    --accent-line: #33477d;
+
+    --danger: #f87171;
+    --danger-hover: #fca5a5;
+    --danger-soft: #3a1d1d;
+
+    --v-simulation-bg: #14321f;  --v-simulation-fg: #6ee7a0;
+    --v-malicious-bg: #3a1d1d;   --v-malicious-fg: #fca5a5;
+    --v-spam-bg: #3a2f10;        --v-spam-fg: #fcd34d;
+    --v-legitimate-bg: #1a2a47;  --v-legitimate-fg: #93b4fd;
+    --v-review-bg: #262d38;      --v-review-fg: #c3ccd9;
+
+    --sev-critical: #f87171;
+    --sev-high: #fbbf24;
+    --sev-medium: #fcd34d;
+    --sev-low: #86d97b;
+    --sev-info: #a9b4c4;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.35);
+    --shadow-raised: 0 2px 4px rgba(0, 0, 0, 0.45), 0 10px 24px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0f1419;
+  --surface: #171e27;
+  --surface-2: #1e2632;
+  --surface-3: #263040;
+  --line: #2d3748;
+  --line-strong: #3d4a5c;
+
+  --text: #e6edf5;
+  --text-2: #a9b4c4;
+  --text-3: #8b95a5;
+
+  --accent: #6d8dff;
+  --accent-hover: #8aa4ff;
+  --accent-soft: #1a2440;
+  --accent-line: #33477d;
+
+  --danger: #f87171;
+  --danger-hover: #fca5a5;
+  --danger-soft: #3a1d1d;
+
+  --v-simulation-bg: #14321f;  --v-simulation-fg: #6ee7a0;
+  --v-malicious-bg: #3a1d1d;   --v-malicious-fg: #fca5a5;
+  --v-spam-bg: #3a2f10;        --v-spam-fg: #fcd34d;
+  --v-legitimate-bg: #1a2a47;  --v-legitimate-fg: #93b4fd;
+  --v-review-bg: #262d38;      --v-review-fg: #c3ccd9;
+
+  --sev-critical: #f87171;
+  --sev-high: #fbbf24;
+  --sev-medium: #fcd34d;
+  --sev-low: #86d97b;
+  --sev-info: #a9b4c4;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-raised: 0 2px 4px rgba(0, 0, 0, 0.45), 0 10px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Butonul de tema */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: var(--fs-md);
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.theme-toggle:hover { background: var(--surface-2); color: var(--text); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.theme-toggle__icon::before { content: "\263E"; }          /* luna: comuta pe intuneric */
+:root[data-theme="dark"] .theme-toggle__icon::before { content: "\2600"; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle__icon::before { content: "\2600"; }
+}
+
+/* Bara de incredere din coada. Numarul ramane acolo - bara e in plus, nu in loc:
+ * la scanat o coada de cincizeci de randuri, lungimea se citeste mai repede
+ * decat doua zecimale. */
+.confidence {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.confidence__track {
+  flex: 1;
+  min-width: 2.5rem;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.confidence__fill { height: 100%; border-radius: 2px; }
+.confidence__fill--high { background: var(--sev-critical); }
+.confidence__fill--medium { background: var(--sev-high); }
+.confidence__fill--low { background: var(--sev-info); }
+.confidence__value { font-variant-numeric: tabular-nums; color: var(--text-2); }
+
+@media print { .theme-toggle { display: none; } }

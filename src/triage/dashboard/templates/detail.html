@@ -1,167 +1,205 @@
 {% extends "base.html" %}
-
-{% block title %}Detaliu Raport {{ report.id }} - {{ report.subject | decode_mime }}{% endblock %}
+{% block title %}{{ report.subject }} · Triaj phishing{% endblock %}
 
 {% block content %}
-<p style="margin-bottom: 1rem;"><a href="/" style="text-decoration: none; color: #4a5568;">&larr; Înapoi la Coadă</a></p>
-
-{% if message %}
-<div style="padding: 12px; background-color: #d1e7dd; color: #0f5132; border-radius: 6px; margin-bottom: 15px; border: 1px solid #badbcc;">
-    {{ message }}
+<div class="page-head">
+  <div>
+    <p class="hint"><a href="/">← Înapoi la coadă</a></p>
+    <h1>{{ report.subject }}</h1>
+    <p>
+      Raportat de {{ report.reporter }} ·
+      <span class="status status--{{ report.status }}">{{ STATUS_LABELS[report.status] }}</span>
+    </p>
+  </div>
+  <div style="text-align:right;">
+    <span class="badge badge--{{ report.verdict }} badge--lg">{{ VERDICT_LABELS[report.verdict] }}</span>
+    <p class="hint numeric" style="margin-top:var(--s2);">
+      încredere {{ '%.2f'|format(report.confidence) }} · scor {{ '%.2f'|format(report.score) }}
+      {% if report.was_corrected %}<br>corectat din {{ VERDICT_LABELS[report.auto_verdict] }}{% endif %}
+    </p>
+  </div>
 </div>
-{% endif %}
 
-<!-- Header Raport -->
-<div class="card" style="display: flex; justify-content: space-between; align-items: center;">
-    <div>
-        <span style="color: #718096; font-size: 0.9rem;">Raport #{{ report.id }}</span>
-        <h2 style="margin: 0.2rem 0 0 0;">{{ report.subject | decode_mime }}</h2>
-    </div>
-    <div>
-        <span class="badge {{ report.verdict }}" style="font-size: 1.1rem; padding: 0.5rem 1rem;">{{ report.verdict }}</span>
-    </div>
-</div>
+<div class="split">
+  <div>
 
-<div style="display: flex; gap: 20px; align-items: flex-start;">
-    <!-- Coloana Stânga: Detalii și Dovezi -->
-    <div style="flex: 2;">
-        
-        <!-- Panou Informații Principale -->
-        <div class="card">
-            <h3 style="border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">Metadate Raport</h3>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.95rem;">
-                <p><strong>Scor Încredere:</strong> {{ report.confidence_score }}</p>
-                <p><strong>Raportor:</strong> {{ report.reporter }}</p>
-            </div>
-
-            <h4 style="margin-top: 1rem;">Dovezi Identificate</h4>
-            {% if report.evidence and report.evidence|length > 0 %}
-                <ul style="background: #fff5f5; border-left: 4px solid var(--danger); padding: 0.8rem 1rem 0.8rem 2rem; margin: 0; border-radius: 0 4px 4px 0;">
-                {% for ev in report.evidence %}
-                    <li style="margin-bottom: 0.3rem;">{{ ev }}</li>
-                {% endfor %}
-                </ul>
-            {% else %}
-                <p style="color: #718096;">Nicio dovadă înregistrată.</p>
-            {% endif %}
-        </div>
-
-        <!-- Panou Headere -->
-        <div class="card">
-            <h3>Headere E-mail</h3>
-            {% if report.headers %}
-            <table>
-                <tr><th style="width: 25%;">Header</th><th>Valoare</th></tr>
-                <tr><td>From</td><td><code>{{ report.headers.get('from', report.get('from', '-')) }}</code></td></tr>
-                <tr><td>Reply-To</td><td><code>{{ report.headers.get('reply_to', report.get('reply_to', '-')) }}</code></td></tr>
-                <tr><td>Return-Path</td><td><code>{{ report.headers.get('return_path', report.get('return_path', '-')) }}</code></td></tr>
-            </table>
-            {% else %}
-            <table>
-                <tr><th style="width: 25%;">Header</th><th>Valoare</th></tr>
-                <tr><td>From</td><td><code>{{ report.get('from', '-') }}</code></td></tr>
-                <tr><td>Reply-To</td><td><code>{{ report.get('reply_to', '-') }}</code></td></tr>
-                <tr><td>Return-Path</td><td><code>{{ report.get('return_path', '-') }}</code></td></tr>
-            </table>
-            {% endif %}
-        </div>
-
-        <!-- Panou Corp E-mail -->
-        <div class="card">
-            <h3>Corp E-mail (Curățat / Defanged)</h3>
-            <pre style="background: #f8fafc; color: #2d3748; padding: 1rem; border: 1px solid var(--border-color); border-radius: 6px; white-space: pre-wrap; word-break: break-word; font-family: inherit;">{{ report.body_text or "Corp e-mail lipsă sau vid." }}</pre>
-        </div>
-
-        <!-- Panou Atasamente -->
-        <div class="card">
-            <h3>Fișiere Atașate</h3>
-            {% if report.attachments and report.attachments|length > 0 %}
-              <ul style="list-style-type: none; padding-left: 0;">
-              {% for att in report.attachments %}
-                <li style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 0.5rem; background: #fafafa;">
-                  📎 <strong>{{ att.filename }}</strong> 
-                  <span style="font-size: 0.85rem; color: #4a5568; display: block; margin-top: 0.2rem;">
-                    MIME: {{ att.mime_type }} | SHA256: <code>{{ att.sha256 }}</code>
-                  </span>
-                </li>
-              {% endfor %}
-              </ul>
-            {% else %}
-              <p style="color: #718096;">Fără atașamente.</p>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- Coloana Dreaptă: Acțiuni Analist -->
-    <div style="flex: 1; position: sticky; top: 1rem;">
-        <div class="card" style="background: #ffffff; border-top: 4px solid var(--primary);">
-            <h3 style="border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">Acțiuni Analist</h3>
-            
-            <!-- Corectare Verdict -->
-            <form method="post" action="/report/{{ report.id }}/action" style="margin-bottom: 1.5rem;">
-                <input type="hidden" name="action" value="override_verdict">
-                <label for="corrected_verdict"><strong>Schimbă / Corectează Verdict:</strong></label>
-                <select name="corrected_verdict" id="corrected_verdict" style="width: 100%; padding: 8px; margin-top: 6px; border: 1px solid #cbd5e0;">
-                    {% for v in ['SIMULATION', 'MALICIOUS', 'SPAM', 'LEGITIMATE', 'NEEDS_REVIEW'] %}
-                    <option value="{{ v }}" {% if report.verdict == v %}selected{% endif %}>{{ v }}</option>
-                    {% endfor %}
-                </select>
-                <button type="submit" style="margin-top: 10px; width: 100%; background: #4a5568; color: white; padding: 8px;">Salvează Corecția</button>
-            </form>
-
-            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 1rem 0;">
-
-            <!-- Draft Răspuns & Copiere -->
-            <form method="post" action="/report/{{ report.id }}/action">
-                <input type="hidden" name="action" value="save_draft">
-                <label for="final_draft"><strong>Draft Răspuns Generat (RO):</strong></label>
-                <textarea id="final_draft" name="final_draft" rows="10" style="width: 100%; margin-top: 6px; padding: 8px; border: 1px solid #cbd5e0; box-sizing: border-box;">{{ report.draft }}</textarea>
-                
-                <div style="display: flex; gap: 8px; margin-top: 10px;">
-                    <button type="button" onclick="copyDraft()" style="flex: 1; background-color: var(--primary); color: white; padding: 9px;">
-                         Copiază Text
-                    </button>
-                    <button type="submit" style="flex: 1; background-color: var(--success); color: white; padding: 9px;">
-                         Salvează Draft
-                    </button>
-                </div>
-                <span id="copy-status" style="display: block; font-size: 0.85em; color: var(--success); margin-top: 5px; text-align: center;"></span>
-            </form>
-
-            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 1rem 0;">
-
-            <!-- Status Răspuns -->
+    <!-- Dovezile sunt motivul verdictului. Stau primele, ca sa poti verifica
+         decizia inainte sa o accepti. -->
+    <section class="panel">
+      <div class="panel__head">
+        <h2>Dovezi</h2>
+        <span class="hint">{{ report.evidence_rows|length }} semnale</span>
+      </div>
+      <div class="panel__body">
+        {% if report.evidence_rows %}
+        <ul class="evidence">
+          {% for ev in report.evidence_rows %}
+          <li>
+            <span class="sev sev--{{ ev.severity }}" title="Severitate: {{ ev.severity }}"></span>
             <div>
-                <strong>Marcare Stare Raport:</strong>
-                <div style="display: flex; gap: 8px; margin-top: 8px;">
-                    <form method="post" action="/report/{{ report.id }}/action" style="flex: 1;">
-                        <input type="hidden" name="action" value="mark_sent">
-                        <button type="submit" style="width: 100%; background-color: #718096; color: white; padding: 8px;">
-                            ✓ Trimis
-                        </button>
-                    </form>
-                    <form method="post" action="/report/{{ report.id }}/action" style="flex: 1;">
-                        <input type="hidden" name="action" value="escalate">
-                        <button type="submit" style="width: 100%; background-color: var(--danger); color: white; padding: 8px;">
-                             Escalează
-                        </button>
-                    </form>
-                </div>
+              <span class="evidence__code">{{ ev.code }} · {{ ev.severity }}</span>
+              {{ ev.description }}
+              {% if ev.detail %}<span class="evidence__detail">{{ ev.detail }}</span>{% endif %}
             </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="hint">Nicio dovadă înregistrată.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head"><h2>Headere</h2></div>
+      <div class="panel__body">
+        <dl class="kv">
+          <dt>From</dt><dd><span class="mono">{{ report.headers.get('from', '-') }}</span></dd>
+          <dt>Nume afișat</dt><dd>{{ report.headers.get('display_name', '-') }}</dd>
+          <dt>Reply-To</dt><dd><span class="mono">{{ report.headers.get('reply_to', '-') }}</span></dd>
+          <dt>Return-Path</dt><dd><span class="mono">{{ report.headers.get('return_path', '-') }}</span></dd>
+          <dt>Autentificare</dt><dd><span class="mono">{{ report.headers.get('auth_results', '-') }}</span></dd>
+          <dt>Message-ID</dt><dd><span class="mono">{{ report.headers.get('message_id', '-') }}</span></dd>
+          <dt>Formă raportare</dt><dd>{{ report.report_kind }}</dd>
+          <dt>Sursă</dt><dd>{{ report.source }} · <span class="mono">{{ report.source_ref or '-' }}</span></dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head">
+        <h2>Linkuri</h2>
+        <span class="hint">dezamorsate — nu sunt clicabile</span>
+      </div>
+      <div class="panel__body">
+        {% if report.defanged_urls %}
+        <ul class="url-list">
+          {% for url in report.defanged_urls %}<li>{{ url }}</li>{% endfor %}
+        </ul>
+        {% else %}
+        <p class="hint">Mesajul nu conține linkuri.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head">
+        <h2>Atașamente</h2>
+        <span class="hint">analizate doar din metadate</span>
+      </div>
+      <div class="panel__body">
+        {% if report.attachments %}
+        {% for att in report.attachments %}
+        <div class="file">
+          <span aria-hidden="true">📎</span>
+          <div>
+            <strong>{{ att.filename }}</strong>
+            {% if att.encrypted_archive %}
+            <span class="file__warn">· arhivă protejată cu parolă</span>
+            {% endif %}
+            <span class="file__meta">{{ att.mime_type }} · {{ att.size }} octeți</span>
+            <span class="file__meta mono">{{ att.sha256 }}</span>
+          </div>
         </div>
+        {% endfor %}
+        {% else %}
+        <p class="hint">Fără atașamente.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head">
+        <h2>Corpul mesajului</h2>
+        <span class="hint">text simplu, dezamorsat</span>
+      </div>
+      <div class="panel__body">
+        {# HTML-ul mailului nu se randeaza NICIODATA aici (sectiunea 4.2).
+           Doar textul, si acela deja trecut prin defang. #}
+        <pre class="body-text">{{ report.body_text or "Corpul mesajului este gol." }}</pre>
+      </div>
+    </section>
+  </div>
+
+  <aside class="split__aside">
+    <div class="panel">
+      <div class="panel__head"><h2>Acțiuni</h2></div>
+      <div class="panel__body">
+
+        <form method="post" action="/report/{{ report.id }}/action" class="field">
+          <input type="hidden" name="action" value="override_verdict">
+          <label for="corrected_verdict">Corectează verdictul</label>
+          <select name="corrected_verdict" id="corrected_verdict">
+            {% for v in VERDICTS %}
+            <option value="{{ v }}" {% if report.verdict == v %}selected{% endif %}>{{ VERDICT_LABELS[v] }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn--wide" style="margin-top:var(--s2);">Salvează corecția</button>
+          <span class="hint" style="display:block; margin-top:var(--s2);">
+            Verdictul automat rămâne înregistrat. Perechea celor două este metrica de calitate.
+          </span>
+        </form>
+
+        <hr class="divider">
+
+        <form method="post" action="/report/{{ report.id }}/action" class="field">
+          <input type="hidden" name="action" value="save_draft">
+          <label for="final_draft">Ciornă de răspuns</label>
+          {% if report.draft %}
+          <textarea id="final_draft" name="final_draft">{{ report.draft }}</textarea>
+          <div class="button-row" style="margin-top:var(--s2);">
+            <button type="button" class="btn" data-copy="final_draft">Copiază</button>
+            <button type="submit" class="btn btn--primary">Salvează</button>
+          </div>
+          <span class="hint" id="copy-status" role="status" style="display:block; margin-top:var(--s2);">
+            Generat {{ 'de model' if report.draft_source == 'llm' else 'din șablonul static' }}.
+          </span>
+          {% else %}
+          <p class="hint">
+            Verdictul este „{{ VERDICT_LABELS[report.verdict] }}”, deci nu se generează
+            ciornă automată. Un mesaj pe care nici sistemul nu îl poate clasifica nu
+            primește răspuns standard.
+          </p>
+          {% endif %}
+        </form>
+
+        <hr class="divider">
+
+        <div class="field">
+          <label>Stare</label>
+          <div class="button-row">
+            <form method="post" action="/report/{{ report.id }}/action">
+              <input type="hidden" name="action" value="mark_sent">
+              <button type="submit" class="btn btn--wide" {% if report.status == 'SENT' %}disabled{% endif %}>
+                Marchează trimis
+              </button>
+            </form>
+            <form method="post" action="/report/{{ report.id }}/action">
+              <input type="hidden" name="action" value="escalate">
+              <button type="submit" class="btn btn--danger btn--wide"
+                      {% if report.status == 'ESCALATED' %}disabled{% endif %}>
+                Escaladează
+              </button>
+            </form>
+          </div>
+        </div>
+
+      </div>
     </div>
+  </aside>
 </div>
 
 <script>
-function copyDraft() {
-    const draftText = document.getElementById("final_draft").value;
-    navigator.clipboard.writeText(draftText).then(() => {
-        const status = document.getElementById("copy-status");
-        status.innerText = "Text copiat în clipboard!";
-        setTimeout(() => { status.innerText = ""; }, 3000);
-    }).catch(err => {
-        console.error("Eroare la copiere: ", err);
-    });
-}
+  document.querySelector("[data-copy]")?.addEventListener("click", async (event) => {
+    const status = document.getElementById("copy-status");
+    const field = document.getElementById(event.currentTarget.dataset.copy);
+    try {
+      await navigator.clipboard.writeText(field.value);
+      status.textContent = "Text copiat în clipboard.";
+    } catch {
+      field.select();
+      status.textContent = "Copierea automată nu este permisă. Textul este selectat — folosește Ctrl+C.";
+    }
+  });
 </script>
 {% endblock %}

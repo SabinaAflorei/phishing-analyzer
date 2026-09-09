@@ -43,7 +43,8 @@ def _p(specific: str, example: str) -> str:
 SIMULATION = _p(
     specific="""Confirmi primirea și atât. Spui că mesajul a fost înregistrat și că urmează să fie analizat de echipă.
 Nu spui ce s-a găsit la analiză, nu spui dacă mesajul este periculos sau nu, nu explici de unde provine și nu dai niciun sfat.
-Rămâi neutru și scurt. Aceste cuvinte sunt interzise în răspuns: simulare, exercițiu, test, testare, antrenament, campanie, training, instruire, fictiv, intern.""",
+Rămâi neutru și scurt. Aceste cuvinte sunt interzise în răspuns: simulare, exercițiu, test, testare, antrenament, campanie, training, instruire, fictiv, intern.
+Corpul mesajului are OBLIGATORIU exact 3 propoziții, nu 2, nu 1. Numără propozițiile înainte să răspunzi. Dacă ai scris mai putin de 3 propoziții, mai adaugă una neutră înainte de formula de încheiere, de exemplu că echipa revine dacă e nevoie de detalii suplimentare.""",
     example="""Bună ziua, Mihai,
 
 Vă mulțumim că ne-ați trimis acest mesaj. Raportarea dumneavoastră a fost înregistrată și urmează să intre în analiza echipei de securitate. Revenim către dumneavoastră dacă avem nevoie de informații suplimentare.
@@ -149,6 +150,7 @@ STATIC_TEMPLATES: dict[str, str] = {
 }
 
 CLOSING = "Cu stimă,"
+
 
 def split_email(text: str) -> tuple[str, str, str]:
     """Împarte răspunsul în (salut, corp, încheiere).

@@ -6,15 +6,10 @@ on:
 
 env:
   # Criteriul de acceptanta (sectiunea 8.4) cere >70% pe parser si analizor.
-  # Pana cand cele doua exista, pragul e 0 - altfel CI e rosu din prima zi,
-  # pe cod pe care nu l-a scris nimeni inca. Il ridici la 70 in PR-ul care
-  # termina analizorul, si de acolo ramane acolo.
-  # TODO: analizorul e terminat de cateva commit-uri, deci momentul descris mai sus
-  # a trecut - pragul e inca 0. Ridica-l la 70, dar DUPA ce adaugi testul care
-  # compara verdictul real cu expected_verdict (vezi TODO din tests/test_corpus.py).
-  # Daca il ridici inainte, CI devine rosu si o sa ajungi sa il dezactivezi, adica
-  # exact ce incearca sa evite comentariul de mai sus.
-  COV_MIN: "0"
+  # Pragul e pe intreg pachetul si e peste cerinta, pentru ca testele acopera
+  # acum si baza de date, ingestia si dashboard-ul. Il ridici cand creste, nu il
+  # cobori cand pica: daca CI devine rosu, lipsesc teste, nu e pragul prea mare.
+  COV_MIN: "85"
 
 jobs:
   check:
@@ -28,4 +23,7 @@ jobs:
       - run: pip install -r requirements-dev.txt && pip install -e .
       - run: ruff check src tests scripts
       - run: mypy
+      # Corpusul real nu intra in git. Fara inlocuitorul sintetic, testele de
+      # verdict s-ar sari, si tocmai ele verifica criteriul 8.1.
+      - run: python3 scripts/make_synthetic_corpus.py
       - run: pytest --cov-fail-under=${{ env.COV_MIN }}

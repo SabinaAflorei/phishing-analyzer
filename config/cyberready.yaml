@@ -14,25 +14,30 @@
 
 # Domeniul din From / Return-Path / envelope al mesajelor de simulare.
 # Se potriveste domeniul exact SAU un subdomeniu al lui.
-# TO DO: cele trei domenii comentate mai jos au SLABIT verificarea, nu au
-# intarit-o. Efectul nu e cel asteptat.
-# Ce e gresit: domeniile alea sunt inca in CYBEREADY_LEGACY_DOMAINS, lista
-# hardcodata din src/triage/analyzer/__init__.py. Deci raman domenii CyberReady,
-# dar nu mai sunt "sensibile", si atunci is_cybeready_simulation intoarce True
-# fara sa mai ceara niciun semnal de confirmare. Testat:
-#   From hp@notificaton.online, fara headere de autentificare, fara niciun semnal
-#   -> SIMULATION 1.0
-# Iar forward-urile inline, care sunt formatul principal de raportare, nu au
-# Authentication-Results, deci nici garda de "spf=fail" nu ajuta.
-# Cum rezolvi: decomenteaza-le. Daca chiar trebuiau scoase, scoate-le si din
-# CYBEREADY_LEGACY_DOMAINS, altfel ai doua surse de adevar care se contrazic.
-# Pe termen lung: lista legacy din cod dubleaza fisierul asta - alege una singura.
-# Comentariul de mai sus zice explicit ca fingerprint-ul sta in config, nu in cod.
+#
+# ATENTIE: lista asta e PUBLICA, e in repo. Deci un domeniu de aici NU e o
+# dovada - oricine il poate pune in headerul From al unui phishing real.
+# De aceea analizorul cere INTOTDEAUNA si un semnal de confirmare pe langa
+# domeniu (Message-ID, IP de expeditie, identitate DKIM, header propriu sau
+# hostname de tracking). Vezi is_cybeready_simulation.
+#
+# Lista hardcodata CYBEREADY_LEGACY_DOMAINS din analyzer a fost mutata aici:
+# erau doua surse de adevar care se contraziceau, iar cea din cod castiga in
+# tacere. Fingerprint-ul sta in config, cum zice capul fisierului.
 sender_domains:
- # - notificaton.online          # From: SCAN <hp@notificaton.online>, d= din DKIM
-  #- crsmtp.notificaton.online   # envelope-from / Return-Path
-  #- cybereadysmtp.com           # HELO si Message-ID: @mta1.cybereadysmtp.com
+  - notificaton.online          # From: SCAN <hp@notificaton.online>, d= din DKIM
+  - crsmtp.notificaton.online   # envelope-from / Return-Path
+  - cybereadysmtp.com           # HELO si Message-ID: @mta1.cybereadysmtp.com
   - ses.distributie-energie.ro
+  - act-now-www.org
+  - admin-support.site
+  - business-insight.online
+  - cloud-mail.store
+  - contactmail.app
+  - do-not-reqly.com
+  - front-desk.site
+  - incoming-mail-msg.com
+  - info-alerts.tech
 
 # IP-urile din care expediaza platforma. Luate din inregistrarea SPF publicata
 # pentru crsmtp.notificaton.online: "v=spf1 ip4:99.80.130.134 ip4:54.228.34.23 ~all"

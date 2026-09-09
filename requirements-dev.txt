@@ -8,3 +8,4 @@ mypy==1.14.1
 types-PyYAML==6.0.12.20241230
 pre-commit==4.0.1
 types-beautifulsoup4
+httpx==0.28.1
